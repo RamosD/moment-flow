@@ -3,12 +3,33 @@
 .affordance {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .state {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-1);
+}
+
+.stateItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.decisionActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.decisionError {
+  flex-basis: 100%;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
 }
 
 .form {
@@ -22,4 +43,14 @@
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-1);
+}
+
+.artifactReference {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+}
+
+.partialActions {
+  margin-top: var(--space-2);
 }

@@ -37,18 +37,16 @@ nos três serviços**. Sem isto, todas as chamadas internas dão `403`.
 
 | Serviço | Directório | Porta default | Healthcheck |
 |---|---|---|---|
-| `backend_core` | `backend_core/` | **8000** | `GET /api/v1/system/health/dependencies/` (staff-only, agregado) |
-| `intelligence_engine` | `intelligence_engine/` | **8001** | `GET /health` (público) |
-| `content_renderer` | `content_renderer/` | **8002** | `GET /health` (público) |
+| `backend_core` | `backend_core/` | **8100** | `GET /api/v1/system/health/dependencies/` (staff-only, agregado) |
+| `intelligence_engine` | `intelligence_engine/` | **8201** | `GET /health` (público) |
+| `content_renderer` | `content_renderer/` | **8202** | `GET /health` (público) |
 | PostgreSQL (loop completo) | `content_renderer/docker-compose.e2e.yml` | **55432→5432** | `pg_isready` |
 
-> ⚠️ **Discrepância conhecida (G9):** `REPORT_RENDERER_BASE_URL` tem default
-> `http://localhost:8003`, mas o `content_renderer` único serve `content_generation`,
-> `report_generation` e `media_kit_generation` todos na porta **8002**. Define
-> sempre `REPORT_RENDERER_BASE_URL=http://localhost:8002` em local/staging.
-> **Como validar:** `curl http://localhost:8002/health` responde; `curl
-> http://localhost:8003/health` falha, salvo se subires deliberadamente um
-> segundo processo nessa porta.
+> ℹ️ **Renderer único (G9, resolvido):** o `content_renderer` serve
+> `content_generation`, `report_generation` e `media_kit_generation` na mesma
+> porta **8202**. Tanto `CONTENT_RENDERER_BASE_URL` como `REPORT_RENDERER_BASE_URL`
+> apontam para `:8202` — os defaults no `config/settings.py` já reflectem isto.
+> **Como validar:** `curl http://localhost:8202/health` responde.
 
 ---
 
@@ -65,13 +63,13 @@ SECRET_KEY=<SECRET_KEY>
 INTERNAL_API_TOKEN=<DEV_TOKEN>
 DEBUG=True
 
-INTELLIGENCE_ENGINE_BASE_URL=http://127.0.0.1:8001
+INTELLIGENCE_ENGINE_BASE_URL=http://127.0.0.1:8201
 INTELLIGENCE_ENGINE_ENABLED=True
 INTELLIGENCE_ENGINE_DRY_RUN=False
 
-CONTENT_RENDERER_BASE_URL=http://localhost:8002
-REPORT_RENDERER_BASE_URL=http://localhost:8002
-BACKEND_PUBLIC_BASE_URL=http://localhost:8000
+CONTENT_RENDERER_BASE_URL=http://localhost:8202
+REPORT_RENDERER_BASE_URL=http://localhost:8202
+BACKEND_PUBLIC_BASE_URL=http://localhost:8100
 EXTERNAL_JOBS_ENABLED=True
 EXTERNAL_JOBS_DRY_RUN=False
 
@@ -88,10 +86,10 @@ INTERNAL_API_TOKEN=<DEV_TOKEN>
 ### 3.3 `content_renderer/.env`
 
 ```dotenv
-PORT=8002
+PORT=8202
 NODE_ENV=development
 INTERNAL_API_TOKEN=<DEV_TOKEN>
-BACKEND_CORE_BASE_URL=http://localhost:8000
+BACKEND_CORE_BASE_URL=http://localhost:8100
 ```
 
 > `<DEV_TOKEN>` tem de ser **literalmente o mesmo valor** nos três ficheiros.
@@ -102,9 +100,9 @@ BACKEND_CORE_BASE_URL=http://localhost:8000
 
 ```text
 1. (opcional) PostgreSQL — só se quiseres o loop completo do renderer
-2. backend_core (migrate + seeds + runserver)         :8000
-3. intelligence_engine (uvicorn)                       :8001
-4. content_renderer (npm run dev / build+start)        :8002
+2. backend_core (migrate + seeds + runserver)         :8100
+3. intelligence_engine (uvicorn)                       :8201
+4. content_renderer (npm run dev / build+start)        :8202
 5. Validar os três healthchecks
 6. Correr os smoke tests
 ```
@@ -129,7 +127,7 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Fica disponível em `http://127.0.0.1:8000/`.
+Fica disponível em `http://127.0.0.1:8100/`.
 
 ### 4.2 Arrancar `intelligence_engine`
 
@@ -139,11 +137,11 @@ python -m venv venv          # só na 1.ª vez
 .\venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env  # depois edita .env conforme §3.2
 $env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:APP_ENV="development"
-.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8201
 ```
 
 > Em staging, remove `--reload` e confirma o `--host` adequado ao ambiente
-> (**confirmar no ambiente**: validar com `curl http://<host>:8001/health`).
+> (**confirmar no ambiente**: validar com `curl http://<host>:8201/health`).
 
 ### 4.3 Arrancar `content_renderer`
 
@@ -151,13 +149,13 @@ $env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:APP_ENV="development"
 cd content_renderer
 npm install                  # só na 1.ª vez
 Copy-Item .env.example .env  # depois edita .env conforme §3.3
-$env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:PORT="8002"; $env:NODE_ENV="development"
+$env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:PORT="8202"; $env:NODE_ENV="development"
 npm run dev
 # alternativa (build de produção):
 # npm run build; npm start
 ```
 
-Fica disponível em `http://localhost:8002/`.
+Fica disponível em `http://localhost:8202/`.
 
 > **Loop completo com callback** (Renderer → Backend Core) exige que o
 > `backend_core` use **PostgreSQL**, não SQLite — o callback corre noutro
@@ -180,8 +178,8 @@ Fica disponível em `http://localhost:8002/`.
 ## 5. Validar `GET /health` de cada serviço
 
 ```powershell
-curl http://127.0.0.1:8001/health      # intelligence_engine — esperar {"status":"ok",...}
-curl http://localhost:8002/health      # content_renderer    — esperar {"status":"ok",...}
+curl http://127.0.0.1:8201/health      # intelligence_engine — esperar {"status":"ok",...}
+curl http://localhost:8202/health      # content_renderer    — esperar {"status":"ok",...}
 ```
 
 Ambos são **públicos, sem token**. O `backend_core` não tem `/health` próprio
@@ -189,7 +187,7 @@ ainda (proxy de readiness sem auth — ver item "por confirmar" na matriz); usa
 `GET /api/v1/schema/` como proxy de liveness:
 
 ```powershell
-curl http://127.0.0.1:8000/api/v1/schema/   # 200 ⇒ Django está de pé
+curl http://127.0.0.1:8100/api/v1/schema/   # 200 ⇒ Django está de pé
 ```
 
 ---
@@ -203,7 +201,7 @@ num único pedido, sempre com `200`:
 # 1. obter um access token JWT de um utilizador is_staff=True
 #    (ex.: via POST /api/v1/auth/login/ com as credenciais do superuser criado em 4.1)
 # 2. chamar o endpoint agregado
-curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/system/health/dependencies/
+curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8100/api/v1/system/health/dependencies/
 ```
 
 Resposta esperada (exemplo, todos os serviços de pé):
@@ -236,7 +234,7 @@ Forma rápida (sem base de dados):
 
 ```powershell
 cd backend_core
-$env:INTELLIGENCE_ENGINE_BASE_URL="http://127.0.0.1:8001"
+$env:INTELLIGENCE_ENGINE_BASE_URL="http://127.0.0.1:8201"
 $env:INTELLIGENCE_ENGINE_INTERNAL_TOKEN="<DEV_TOKEN>"
 $env:INTELLIGENCE_ENGINE_ENABLED="true"; $env:INTELLIGENCE_ENGINE_DRY_RUN="false"
 .\venv\Scripts\python.exe manage.py smoke_intelligence_engine
@@ -247,7 +245,7 @@ Sucesso esperado: linha `smoke_ie ok {...}` com as 6 chaves (`analysis`, `scores
 Loop completo (com base de dados, opt-in `pytest`):
 
 ```powershell
-$env:RUN_REAL_IE="1"; $env:REAL_IE_BASE_URL="http://127.0.0.1:8001"; $env:REAL_IE_TOKEN="<DEV_TOKEN>"
+$env:RUN_REAL_IE="1"; $env:REAL_IE_BASE_URL="http://127.0.0.1:8201"; $env:REAL_IE_TOKEN="<DEV_TOKEN>"
 .\venv\Scripts\python.exe -m pytest apps/campaigns/tests/test_intelligence_real_loop.py -q
 ```
 
@@ -262,7 +260,7 @@ aceitação `202`):
 ```powershell
 cd backend_core
 $env:INTERNAL_API_TOKEN="<DEV_TOKEN>"
-$env:CONTENT_RENDERER_BASE_URL="http://localhost:8002"
+$env:CONTENT_RENDERER_BASE_URL="http://localhost:8202"
 .\venv\Scripts\python.exe manage.py smoke_content_renderer --health-only
 .\venv\Scripts\python.exe manage.py smoke_content_renderer
 ```
@@ -311,9 +309,9 @@ powershell -ExecutionPolicy Bypass -File scripts\run-e2e-postgres.ps1
 | `INTELLIGENCE_ENGINE_BASE_URL`/`CONTENT_RENDERER_BASE_URL` aponta para porta errada | Defaults não ajustados ao ambiente | Confirmar com `curl` directo a essa porta/`/health` |
 | Callback do renderer dá `404` no Django | `backend_core` a usar SQLite com callback cross-processo | Usar PostgreSQL (§4.3) para o loop completo; para smoke rápido (sem callback), Camada 1 do §8 é suficiente |
 | Healthcheck agregado devolve `401`/`403` | Sem JWT ou utilizador não `is_staff` | Obter token de um utilizador `is_staff=True` (`createsuperuser` em §4.1) |
-| Porta ocupada (`8000`/`8001`/`8002`) | Processo anterior não terminado | Windows: `Get-NetTCPConnection -LocalPort 8000 \| Select-Object OwningProcess` → `Stop-Process -Id <PID>` |
+| Porta ocupada (`8100`/`8201`/`8202`) | Processo anterior não terminado | Windows: `Get-NetTCPConnection -LocalPort 8100 \| Select-Object OwningProcess` → `Stop-Process -Id <PID>` |
 | `smoke_intelligence_engine` falha com "Cannot run … config" | `INTELLIGENCE_ENGINE_ENABLED=False` ou `DRY_RUN=True` ou token/URL vazios | Ajustar `.env`/variáveis conforme §7; smoke real exige `ENABLED=True` e `DRY_RUN=False` |
-| `smoke_content_renderer` falha com "unavailable" | Renderer não está a correr ou porta errada | `curl http://localhost:8002/health`; confirmar `CONTENT_RENDERER_BASE_URL` |
+| `smoke_content_renderer` falha com "unavailable" | Renderer não está a correr ou porta errada | `curl http://localhost:8202/health`; confirmar `CONTENT_RENDERER_BASE_URL` |
 | IE recusa arrancar em `production` | `INTERNAL_API_TOKEN` vazio com `APP_ENV=production` | Definir o token antes de mudar `APP_ENV` para `production` |
 | Renderer recusa arrancar | Token vazio sem `ALLOW_INSECURE_EMPTY_TOKEN=true` | Definir `INTERNAL_API_TOKEN` (recomendado) ou, só em dev, `ALLOW_INSECURE_EMPTY_TOKEN=true` |
 | Django recusa arrancar (`DEBUG=False`) | Guarda fail-fast: IE `ENABLED`+`DRY_RUN=False`+token vazio | Definir `INTELLIGENCE_ENGINE_INTERNAL_TOKEN`/`INTERNAL_API_TOKEN` antes de desligar `DEBUG` |

@@ -20,17 +20,17 @@
 | Variável (Backend Core) | Valor |
 |---|---|
 | `INTERNAL_API_TOKEN` | **não vazio**; o **mesmo** valor no renderer |
-| `CONTENT_RENDERER_BASE_URL` | URL do renderer (`http://localhost:8002`) |
-| `REPORT_RENDERER_BASE_URL` | `http://localhost:8002` ⚠️ (o renderer único serve report/media-kit; o default `:8003` deve ser apontado para `:8002`) |
+| `CONTENT_RENDERER_BASE_URL` | URL do renderer (`http://localhost:8202`) |
+| `REPORT_RENDERER_BASE_URL` | `http://localhost:8202` (renderer único serve report/media-kit na mesma porta) |
 | `EXTERNAL_JOBS_ENABLED` | `True` (loop completo) |
 | `EXTERNAL_JOBS_DRY_RUN` | `False` (loop completo) |
-| `BACKEND_PUBLIC_BASE_URL` | `http://localhost:8000` (base do `callback_url`) |
+| `BACKEND_PUBLIC_BASE_URL` | `http://localhost:8100` (base do `callback_url`) |
 
 Renderer (mesmo token):
 
 ```powershell
 cd content_renderer
-$env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:PORT="8002"; $env:NODE_ENV="development"
+$env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:PORT="8202"; $env:NODE_ENV="development"
 npm run build; npm start    # ou: npm run dev
 ```
 
@@ -45,19 +45,19 @@ de dados do Backend Core.
 ```powershell
 cd backend_core
 $env:INTERNAL_API_TOKEN="<DEV_TOKEN>"
-$env:CONTENT_RENDERER_BASE_URL="http://localhost:8002"
+$env:CONTENT_RENDERER_BASE_URL="http://localhost:8202"
 venv/Scripts/python.exe manage.py smoke_content_renderer
 # só health, sem despoletar render:
 venv/Scripts/python.exe manage.py smoke_content_renderer --health-only
-# outros tipos (usam REPORT_RENDERER_BASE_URL → apontar para :8002):
+# outros tipos (usam REPORT_RENDERER_BASE_URL → apontar para :8202):
 venv/Scripts/python.exe manage.py smoke_content_renderer --job-type report_generation
 ```
 
 **Saída de sucesso** (o token nunca aparece):
 
 ```text
-smoke_renderer config job_type=content_generation provider=content_renderer base_url=http://localhost:8002 token=configured timeout_s=30 external_jobs_enabled=True external_jobs_dry_run=False
-smoke_renderer health provider=content_renderer base_url=http://localhost:8002 status=ok duration_ms=8
+smoke_renderer config job_type=content_generation provider=content_renderer base_url=http://localhost:8202 token=configured timeout_s=30 external_jobs_enabled=True external_jobs_dry_run=False
+smoke_renderer health provider=content_renderer base_url=http://localhost:8202 status=ok duration_ms=8
 smoke_renderer submit job_id=<hex> request_id=<hex> job_type=content_generation
 smoke_renderer ok {"status_code": 202, "ack_status": "accepted", "job_id": "<hex>", "job_type": "content_generation", "renderer": "content_renderer"}
 note: the renderer renders in the background and will POST a callback; this command verifies only the 202 acceptance ...

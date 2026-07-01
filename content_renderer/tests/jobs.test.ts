@@ -57,7 +57,7 @@ function makeEnvelope(overrides: EnvelopeOverrides = {}) {
     workspace_id: 'ws-123',
     request_id: 'req-123',
     job_type: 'content_generation',
-    callback_url: 'http://localhost:8000/api/v1/internal/jobs/callback/',
+    callback_url: 'http://localhost:8100/api/v1/internal/jobs/callback/',
     entity: { type: 'content_pack_request', id: 'ent-123' },
     payload_version: '1.0',
     payload: {},

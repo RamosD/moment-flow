@@ -592,9 +592,9 @@ Contexto:
 
 Instruções:
 - Lê o backlog, arquitectura da feature e relatórios anteriores.
-- Confirmar Backend Core real em localhost:8000.
-- Confirmar frontend em localhost:5173.
-- Confirmar VITE_BACKEND_API_BASE_URL=http://localhost:8000/api/v1.
+- Confirmar Backend Core real em localhost:8100.
+- Confirmar frontend em localhost:5200.
+- Confirmar VITE_BACKEND_API_BASE_URL=http://localhost:8100/api/v1.
 - Fazer login real com utilizador dev/local.
 - Seleccionar workspace real.
 - Abrir campanha real.

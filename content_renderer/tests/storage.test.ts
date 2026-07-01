@@ -19,7 +19,7 @@ function configFor(root: string, overrides: NodeJS.ProcessEnv = {}) {
     NODE_ENV: 'test',
     INTERNAL_API_TOKEN: 't',
     LOCAL_STORAGE_ROOT: root,
-    LOCAL_STORAGE_PUBLIC_BASE_URL: 'http://localhost:8002/files',
+    LOCAL_STORAGE_PUBLIC_BASE_URL: 'http://localhost:8202/files',
     ...overrides,
   });
 }
@@ -92,7 +92,7 @@ describe('local storage', () => {
 
     expect(meta.mime_type).toBe('application/pdf');
     expect(meta.checksum).toBe(createHash('sha256').update(data).digest('hex'));
-    expect(meta.public_url).toBe('http://localhost:8002/files/workspaces/ws/jobs/job/report.pdf');
+    expect(meta.public_url).toBe('http://localhost:8202/files/workspaces/ws/jobs/job/report.pdf');
   });
 
   it('honours an explicit mime type and width/height', async () => {
@@ -157,7 +157,7 @@ describe('storage provider abstraction (R-HARD-005)', () => {
     expect(typeof storage.getPublicUrl).toBe('function');
     expect(isLocalStorageProvider(storage)).toBe(true);
     expect(storage.getPublicUrl('workspaces/ws/jobs/job/a.png')).toBe(
-      'http://localhost:8002/files/workspaces/ws/jobs/job/a.png',
+      'http://localhost:8202/files/workspaces/ws/jobs/job/a.png',
     );
   });
 

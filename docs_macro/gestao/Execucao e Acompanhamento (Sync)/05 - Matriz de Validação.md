@@ -293,7 +293,7 @@ venv/Scripts/python.exe -m ruff check apps/ config/
 venv/Scripts/python.exe manage.py check
 venv/Scripts/python.exe manage.py spectacular --file <tmp>   # diff vs schema.yml
 # Loop real (opt-in, exige os dois serviços a correr):
-RUN_REAL_IE=1 REAL_IE_BASE_URL=http://127.0.0.1:8001 REAL_IE_TOKEN=<token-local> \
+RUN_REAL_IE=1 REAL_IE_BASE_URL=http://127.0.0.1:8201 REAL_IE_TOKEN=<token-local> \
     venv/Scripts/python.exe -m pytest apps/campaigns/tests/test_intelligence_real_loop.py -q
 ```
 

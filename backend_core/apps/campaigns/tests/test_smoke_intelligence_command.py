@@ -72,7 +72,7 @@ class _FakeClient:
 
 
 def _enable_real_loop(settings, token=SMOKE_TOKEN):
-    settings.INTELLIGENCE_ENGINE_BASE_URL = "http://127.0.0.1:8001"
+    settings.INTELLIGENCE_ENGINE_BASE_URL = "http://127.0.0.1:8201"
     settings.INTELLIGENCE_ENGINE_ENABLED = True
     settings.INTELLIGENCE_ENGINE_DRY_RUN = False
     settings.INTELLIGENCE_ENGINE_INTERNAL_TOKEN = token

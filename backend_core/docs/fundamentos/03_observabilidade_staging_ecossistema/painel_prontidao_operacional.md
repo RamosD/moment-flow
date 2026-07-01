@@ -105,7 +105,7 @@ controlado — ver §9/§10):
 | B4 | Scores/grades/recomendações do IE são heurísticos, não calibrados | **bloqueado** | Fora do escopo desta fase (backlog §13.4) — é validação de diagnóstico operacional, não de valor de negócio. |
 | B5 | Sem staging contínuo / pipeline de deploy | **bloqueado** | Fora do escopo desta fase (backlog §4.2: sem CI/CD completo, sem Kubernetes). |
 | B6 | Gestão segura de secrets (cofre/rotação) em staging/produção | **bloqueado** | Hoje só `.env` git-ignored; sem rotação nem cofre. |
-| B7 | Discrepância de porta do report renderer (G9) não corrigida no código, só documentada | **parcial** | Workaround documentado (`REPORT_RENDERER_BASE_URL=:8002`) é suficiente para staging técnico, mas o default em código continua `:8003` — risco de erro humano se a variável não for explicitamente definida. |
+| B7 | Discrepância de porta do report renderer (G9) — corrigida na padronização de portas | **resolvido** | `CONTENT_RENDERER_BASE_URL` e `REPORT_RENDERER_BASE_URL` apontam agora ambas para `:8202` por defeito no código. O workaround manual deixou de ser necessário. |
 | B8 | Healthcheck agregado e smoke tests nunca executados contra processos reais nesta fase | **pendente** | Ver §2/§3 — a cobertura automatizada (mocks/testes unitários) é sólida, mas falta a confirmação operacional "ao vivo" antes de qualquer piloto real. |
 
 ---
@@ -115,7 +115,7 @@ controlado — ver §9/§10):
 | ID | Risco | Estado |
 |---|---|---|
 | OBS-RSK-007 (backlog) | Validação real (3 serviços simultâneos) nunca executada nesta fase — só documentada como executável | **em aberto** — mitigação: runbook + guias de smoke deixam o caminho pronto a executar; falta a execução em si. |
-| G9 (matriz) | Discrepância de porta do report renderer (8003 vs 8002) | **em aberto** — mitigado por documentação, não corrigido no default de código. |
+| G9 (matriz) | Discrepância de porta do report renderer (8003 vs 8002) | **resolvido** — ambos `CONTENT_RENDERER_BASE_URL` e `REPORT_RENDERER_BASE_URL` defaultam agora para `:8202` no código. |
 | Heterogeneidade de formato de log entre serviços | **em aberto** — aceitável para o âmbito MVP desta fase (sem agregação automática); revisitar se uma stack de observabilidade real for introduzida no futuro. |
 | Falta de liveness público (sem auth) no `backend_core` | **em aberto** — mitigado por `GET /api/v1/schema/` como proxy; um probe de infra dedicado pode precisar de um endpoint próprio. |
 | Caso 4/Caso 6 da checklist (falha interna do IE / callback sem chegar) dependem de inspecção de código fora do escopo desta fase | **em aberto** — diagnóstico do lado do Backend Core está documentado; causa raiz dentro do IE/renderer fica fora desta fase por desenho (backlog §5.2.8). |

@@ -170,10 +170,10 @@ class TestRegistry:
             registry.resolve_service("metrics_collection")
 
     def test_callback_url_is_absolute(self, settings):
-        settings.BACKEND_PUBLIC_BASE_URL = "http://localhost:8000/"
+        settings.BACKEND_PUBLIC_BASE_URL = "http://localhost:8100/"
         settings.INTERNAL_CALLBACK_PATH = "/api/v1/internal/jobs/callback/"
         assert registry.callback_url() == (
-            "http://localhost:8000/api/v1/internal/jobs/callback/"
+            "http://localhost:8100/api/v1/internal/jobs/callback/"
         )
 
     def test_switches(self, settings):

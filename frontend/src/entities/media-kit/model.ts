@@ -58,3 +58,10 @@ export interface MediaKit {
   storage_asset?: UUID | null
   metadata?: Metadata
 }
+
+export interface CreateMediaKitPayload {
+  campaign: UUID
+  artist: UUID
+  title: string
+  track?: UUID | null
+}

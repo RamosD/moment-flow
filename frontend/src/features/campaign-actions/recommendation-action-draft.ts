@@ -1,9 +1,8 @@
 /**
- * Builds a frontend-only "action draft" from a flexible intelligence
- * recommendation. A draft is an intent, never persisted on its own — only
- * `createCampaignAction` (entities/campaign-action, CA-003) turns it into a
- * real Backend Core artifact once the user confirms a "Create action" form
- * (CA-007, not implemented yet).
+ * Builds a frontend-only action draft from a flexible intelligence
+ * recommendation. The draft now carries the safe correlation context required
+ * by the persistent CampaignAction create flow; the draft itself is never
+ * persisted.
  *
  * The recommendation contract is explicitly NOT guaranteed (see
  * `entities/campaign/intelligence.ts`): fields may be missing, renamed, or of
@@ -11,19 +10,22 @@
  */
 
 import type { CampaignRecommendation } from '@/entities/campaign'
-import { deriveRecommendationRef } from '@/entities/campaign-action'
 import type {
+  CampaignActionPriority,
   CampaignActionSource,
-  RecommendationLike,
   RecommendationRef,
-  SupportedCampaignActionType,
 } from '@/entities/campaign-action'
+import type { Metadata } from '@/shared/types'
+
+import type { ArtifactCampaignActionType } from './action-type-options'
+import { buildRecommendationCampaignActionContext } from './recommendation-snapshot'
 
 export interface RecommendationActionDraft {
   recommendationRef: RecommendationRef
+  recommendationSnapshot: Metadata
   title: string
   description: string | null
-  priority: string | null
+  priority: CampaignActionPriority
   /** Raw confidence value from the recommendation, if numeric. Not normalized. */
   confidence: number | null
   /**
@@ -31,7 +33,7 @@ export interface RecommendationActionDraft {
    * suggesting an unsupported type would be misleading since it could never
    * be created. `null` when no keyword signal matches.
    */
-  suggestedActionType: SupportedCampaignActionType | null
+  suggestedActionType: ArtifactCampaignActionType | null
   source: CampaignActionSource
 }
 
@@ -47,17 +49,12 @@ function firstString(...values: unknown[]): string | null {
   return null
 }
 
-function readPriority(value: unknown): string | null {
-  if (typeof value === 'number') return `Priority ${value}`
-  return asString(value) ?? null
-}
-
 function readConfidence(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 /** Keyword → supported action type. Best-effort; unmatched stays `null`. */
-const TYPE_KEYWORDS: ReadonlyArray<[RegExp, SupportedCampaignActionType]> = [
+const TYPE_KEYWORDS: ReadonlyArray<[RegExp, ArtifactCampaignActionType]> = [
   [/report/i, 'report_request'],
   [/media[_\s-]?kit/i, 'media_kit_request'],
   [/content[_\s-]?pack|asset|content/i, 'content_pack'],
@@ -65,7 +62,7 @@ const TYPE_KEYWORDS: ReadonlyArray<[RegExp, SupportedCampaignActionType]> = [
 
 function suggestActionType(
   recommendation: CampaignRecommendation,
-): SupportedCampaignActionType | null {
+): ArtifactCampaignActionType | null {
   const signal = firstString(
     recommendation.action,
     recommendation.type,
@@ -79,19 +76,6 @@ function suggestActionType(
   return null
 }
 
-/** Narrow a recommendation down to the fields {@link deriveRecommendationRef} needs. */
-function toRecommendationLike(
-  recommendation: CampaignRecommendation,
-): RecommendationLike {
-  return {
-    id: recommendation.id,
-    title: recommendation.title,
-    label: asString(recommendation.label),
-    action: recommendation.action,
-    type: recommendation.type,
-  }
-}
-
 /**
  * Build a draft from a recommendation. Tolerates any subset of fields being
  * present or absent — never throws on missing/malformed data — so the UI can
@@ -103,16 +87,18 @@ export function buildRecommendationActionDraft(
   index: number,
 ): RecommendationActionDraft {
   const rec = recommendation ?? {}
+  const context = buildRecommendationCampaignActionContext(
+    campaignId,
+    recommendation,
+    index,
+  )
 
   return {
-    recommendationRef: deriveRecommendationRef(
-      campaignId,
-      toRecommendationLike(rec),
-      index,
-    ),
+    recommendationRef: context.recommendationRef,
+    recommendationSnapshot: context.recommendationSnapshot,
     title: firstString(rec.title, rec.label, rec.action) ?? 'Recommendation',
     description: firstString(rec.description, rec.reason),
-    priority: readPriority(rec.priority),
+    priority: context.priority,
     confidence: readConfidence(rec.confidence),
     suggestedActionType: suggestActionType(rec),
     source: 'recommendation',

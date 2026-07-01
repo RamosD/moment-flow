@@ -190,9 +190,9 @@ Nunca:
 
 ## 6. Configuração de ambiente
 
-`src/shared/config/env.ts` lê `VITE_BACKEND_API_BASE_URL` (ex.: `http://localhost:8000/api/v1`).
+`src/shared/config/env.ts` lê `VITE_BACKEND_API_BASE_URL` (ex.: `http://localhost:8100/api/v1`).
 
-- Em dev, se a variável não existir, cai para `http://localhost:8000/api/v1` com um `console.warn` (não é segredo, é só conveniência local).
+- Em dev, se a variável não existir, cai para `http://localhost:8100/api/v1` com um `console.warn` (não é segredo, é só conveniência local).
 - Em produção, a ausência da variável **lança erro no boot** (`EnvConfigError`) — falha alto e explícito em vez de apontar silenciosamente para `undefined`.
 - Valida que o valor é um URL `http(s)` válido.
 - `ENV.isDev` / `ENV.isProd` vêm de `import.meta.env.DEV/PROD`.

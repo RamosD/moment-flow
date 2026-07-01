@@ -11,6 +11,8 @@
 
 import type { UUID } from '@/shared/types'
 
+export const MAX_RECOMMENDATION_REF_LENGTH = 512
+
 /**
  * Minimal structural shape of a recommendation. Declared locally (rather than
  * importing the campaign entity's `CampaignRecommendation`) to keep entities
@@ -53,6 +55,27 @@ function firstString(...values: unknown[]): string | null {
   return null
 }
 
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+/** Trim and deterministically cap an opaque ref to the backend's 512 chars. */
+export function normalizeRecommendationRef(value: string): string {
+  const normalized = value.trim()
+  if (normalized.length <= MAX_RECOMMENDATION_REF_LENGTH) return normalized
+
+  const suffix = `:h:${stableHash(normalized)}`
+  return `${normalized.slice(
+    0,
+    MAX_RECOMMENDATION_REF_LENGTH - suffix.length,
+  )}${suffix}`
+}
+
 /**
  * Derive a stable, defensive reference for an intelligence recommendation.
  * Prefers the recommendation's own `id` when present; otherwise falls back to a
@@ -65,14 +88,17 @@ export function deriveRecommendationRef(
   index: number,
 ): RecommendationRef {
   const rec = recommendation ?? {}
-  const recommendationId = rec.id != null ? String(rec.id) : null
+  const rawRecommendationId = rec.id != null ? String(rec.id).trim() : ''
+  const recommendationId = rawRecommendationId || null
   const title = firstString(rec.title, rec.label)
   const action = firstString(rec.action)
   const type = firstString(rec.type)
 
-  const ref = recommendationId
-    ? `${campaignId}:id:${recommendationId}`
-    : `${campaignId}:i${index}:${slugify(title ?? action ?? type ?? 'rec') || 'rec'}`
+  const ref = normalizeRecommendationRef(
+    recommendationId
+      ? `${campaignId}:id:${recommendationId}`
+      : `${campaignId}:i${index}:${slugify(title ?? action ?? type ?? 'rec') || 'rec'}`,
+  )
 
   return { ref, campaignId, index, recommendationId, title, action, type }
 }

@@ -19,6 +19,8 @@ export {
   NetworkError,
 } from './errors'
 export type { ApiErrorOptions, FieldErrors } from './errors'
+export { mapHttpError } from './error-mapping'
+export { appendSafeCustomHeaders, INTERNAL_TOKEN_HEADER } from './security'
 
 export type {
   Paginated,

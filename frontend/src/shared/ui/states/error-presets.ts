@@ -6,7 +6,7 @@ import {
   ServiceUnavailableError,
   UnauthorizedError,
   ValidationError,
-} from '@/shared/api'
+} from '../../api/errors.ts'
 
 export interface ErrorStatePreset {
   title: string

@@ -1,73 +1,88 @@
 import { useState } from 'react'
 
 import type { Campaign, CampaignRecommendation } from '@/entities/campaign'
-import type { CampaignAction } from '@/entities/campaign-action'
+import { useCampaignActionsByRecommendation } from '@/entities/campaign-action'
 import { Button } from '@/shared/ui'
 
 import { CreateActionFromRecommendationDialog } from './CreateActionFromRecommendationDialog'
+import { RecommendationDecisionActions } from './RecommendationDecisionActions'
 import { RecommendationActionState } from './RecommendationActionState'
-import { matchRecommendationAction } from './recommendation-action-match'
+import { matchRecommendationActions } from './recommendation-action-match'
 import { useRecommendationActionDraft } from './useRecommendationActionDraft'
 import styles from './campaign-actions.module.css'
 
 interface CreateActionFromRecommendationButtonProps {
   workspaceId: string | null
-  /** Source campaign. Undefined while loading — the affordance disables itself. */
   campaign: Campaign | undefined
   recommendation: CampaignRecommendation
   index: number
-  /** Already-created campaign actions, for duplicate detection (CA-009). */
-  actions: CampaignAction[] | undefined
 }
 
 /**
- * Per-recommendation execution affordance (CA-006).
- *
- * Renders one of three states:
- *  - a read-only status indicator when a matching action already exists
- *    (avoids obvious duplication);
- *  - a "Create action" button that opens the confirm dialog;
- *  - a disabled button while the campaign is still loading.
- *
- * Recommendations are never converted automatically — creation always requires
- * the user to confirm in the dialog.
+ * Recommendation affordance backed by an exact CampaignAction lookup.
+ * The lookup is isolated from the rest of the intelligence panel: failure only
+ * disables creation until duplicate state can be checked safely.
  */
 export function CreateActionFromRecommendationButton({
   workspaceId,
   campaign,
   recommendation,
   index,
-  actions,
 }: CreateActionFromRecommendationButtonProps) {
   const [open, setOpen] = useState(false)
   const draft = useRecommendationActionDraft(campaign?.id, recommendation, index)
-  const matched = matchRecommendationAction(draft, actions)
-
-  if (matched) {
-    return <RecommendationActionState action={matched} />
-  }
-
-  const ready = Boolean(campaign && draft)
+  const actionsQuery = useCampaignActionsByRecommendation(
+    workspaceId,
+    campaign?.id,
+    draft?.recommendationRef.ref,
+  )
+  const actions = matchRecommendationActions(
+    draft,
+    actionsQuery.data?.results,
+  )
+  const actionCount = actionsQuery.data?.count ?? 0
+  const hasActions = actionCount > 0
+  const lookupReady = !actionsQuery.isPending && !actionsQuery.isError
+  const ready = Boolean(campaign && draft && lookupReady)
 
   return (
-    <span className={styles.affordance}>
+    <div className={styles.affordance}>
+      {hasActions && (
+        <RecommendationActionState
+          actions={actions}
+          totalCount={actionCount}
+        />
+      )}
       <Button
         variant="secondary"
         size="sm"
         disabled={!ready}
+        title={
+          actionsQuery.isError
+            ? 'Could not verify existing campaign actions.'
+            : undefined
+        }
         onClick={() => setOpen(true)}
       >
-        Create action
+        {hasActions ? 'Create another action' : 'Create action'}
       </Button>
       {ready && draft && campaign && (
+        <RecommendationDecisionActions
+          workspaceId={workspaceId}
+          campaign={campaign}
+          draft={draft}
+          actions={actions}
+        />
+      )}
+      {open && ready && draft && campaign && (
         <CreateActionFromRecommendationDialog
-          open={open}
+          open
           onClose={() => setOpen(false)}
           draft={draft}
           campaign={campaign}
           workspaceId={workspaceId}
         />
       )}
-    </span>
+    </div>
   )
 }

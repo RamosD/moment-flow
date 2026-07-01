@@ -50,13 +50,13 @@ Instruções:
   - errors/errors.ts.
 - Cria endpoint GET /health.
 - Cria .env.example com variáveis mínimas:
-  - PORT=8002;
+  - PORT=8202;
   - NODE_ENV=development;
   - INTERNAL_API_TOKEN=;
-  - RENDERER_PUBLIC_BASE_URL=http://localhost:8002;
-  - BACKEND_CORE_BASE_URL=http://localhost:8000;
+  - RENDERER_PUBLIC_BASE_URL=http://localhost:8202;
+  - BACKEND_CORE_BASE_URL=http://localhost:8100;
   - LOCAL_STORAGE_ROOT=./storage;
-  - LOCAL_STORAGE_PUBLIC_BASE_URL=http://localhost:8002/files;
+  - LOCAL_STORAGE_PUBLIC_BASE_URL=http://localhost:8202/files;
   - MAX_JOB_PAYLOAD_BYTES=1048576;
   - CALLBACK_TIMEOUT_SECONDS=20;
   - RENDER_TIMEOUT_SECONDS=30.
@@ -906,15 +906,15 @@ Instruções:
   - docs\backend_core\integracoes\02_estado_integracao_fastapi_renderer.md.
 - Não alteres o backend_core salvo se for indispensável e documentado.
 - Configura teste manual ou automatizado com dois serviços:
-  - backend_core em localhost:8000;
-  - content_renderer em localhost:8002.
+  - backend_core em localhost:8100;
+  - content_renderer em localhost:8202.
 - Garante que INTERNAL_API_TOKEN é igual nos dois serviços.
 - Garante que o Django tem:
-  - CONTENT_RENDERER_BASE_URL=http://localhost:8002;
+  - CONTENT_RENDERER_BASE_URL=http://localhost:8202;
   - EXTERNAL_JOBS_ENABLED=true;
   - EXTERNAL_JOBS_DRY_RUN=false.
 - Garante que o renderer tem:
-  - BACKEND_CORE_BASE_URL=http://localhost:8000;
+  - BACKEND_CORE_BASE_URL=http://localhost:8100;
   - INTERNAL_API_TOKEN igual ao Django;
   - LOCAL_STORAGE_ROOT configurado.
 - Cria um guia ou script de teste E2E local, conforme for mais adequado.

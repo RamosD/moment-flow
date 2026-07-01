@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { useCampaign } from '@/entities/campaign'
-import { useCampaignActions } from '@/entities/campaign-action'
 import { CreateActionFromRecommendationButton } from '@/features/campaign-actions'
 import {
   ExplanationsPanel,
@@ -31,11 +30,11 @@ import styles from './CampaignWarRoomPage.module.css'
 /**
  * Campaign War Room MVP.
  *
- * Composes two real data sources from the Backend Core — the campaign (header)
- * and its intelligence — into a single dashboard. Assets/reports are honest
- * placeholders (FE-012). The page stays useful even when intelligence fails,
- * has warnings, or returns insufficient data: the header and the assets/reports
- * areas always render. Never calls the Intelligence Engine or Renderer directly.
+ * Composes independent Backend Core data sources into a single dashboard:
+ * campaign, intelligence, persistent CampaignActions and proprietary output
+ * panels. The page stays useful when intelligence or CampaignActions fail;
+ * sibling panels keep their own query/error boundaries. Never calls the
+ * Intelligence Engine or Renderer directly.
  */
 export function CampaignWarRoomPage() {
   const { campaignId } = useParams()
@@ -43,9 +42,6 @@ export function CampaignWarRoomPage() {
 
   const campaignQuery = useCampaign(workspaceId, campaignId)
   const intelligenceQuery = useCampaignIntelligence(workspaceId, campaignId)
-  // Drives recommendation execution state (CA-009) and feeds the actions panel.
-  // Shares its cache key with the panel's own query, so this is a single fetch.
-  const actionsQuery = useCampaignActions(workspaceId, campaignId)
 
   if (!workspaceId) {
     return <WorkspaceRequiredState />
@@ -98,7 +94,6 @@ export function CampaignWarRoomPage() {
                     campaign={campaignQuery.data}
                     recommendation={recommendation}
                     index={index}
-                    actions={actionsQuery.data}
                   />
                 )}
               />

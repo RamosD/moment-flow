@@ -2,8 +2,8 @@
 # E2E harness on PostgreSQL (R-HARD-002).
 #
 # Reliable MULTI-PROCESS loop: brings up an ephemeral PostgreSQL (Docker),
-# points backend_core at it, migrates + seeds, boots the renderer (:8002) and
-# Django (:8000) with the SAME internal token, waits for readiness, runs the E2E
+# points backend_core at it, migrates + seeds, boots the renderer (:8202) and
+# Django (:8100) with the SAME internal token, waits for readiness, runs the E2E
 # driver, collects evidence, then tears everything down.
 #
 # Why PostgreSQL: SQLite cannot share committed rows across processes, so the
@@ -88,14 +88,14 @@ try {
   $env:DB_ENGINE          = 'postgres'
   $env:DB_HOST            = 'localhost'
   $env:INTERNAL_API_TOKEN = $token
-  $env:PORT               = '8002'
+  $env:PORT               = '8202'
   $env:NODE_ENV           = 'development'
   $env:LOG_LEVEL          = 'warn'
   $env:STORAGE_PROVIDER   = 'local'
   $env:LOCAL_STORAGE_ROOT = $storage
-  $env:CONTENT_RENDERER_BASE_URL = 'http://localhost:8002'
-  $env:REPORT_RENDERER_BASE_URL  = 'http://localhost:8002'
-  $env:BACKEND_PUBLIC_BASE_URL   = 'http://localhost:8000'
+  $env:CONTENT_RENDERER_BASE_URL = 'http://localhost:8202'
+  $env:REPORT_RENDERER_BASE_URL  = 'http://localhost:8202'
+  $env:BACKEND_PUBLIC_BASE_URL   = 'http://localhost:8100'
   $env:EXTERNAL_JOBS_ENABLED     = 'true'
   $env:EXTERNAL_JOBS_DRY_RUN     = 'false'
 
@@ -113,18 +113,18 @@ try {
   $renderer = Start-Process -FilePath 'node' -ArgumentList 'dist/server.js' `
     -WorkingDirectory $rendererDir -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput $rOut -RedirectStandardError $rErr
-  $django = Start-Process -FilePath $py -ArgumentList 'manage.py', 'runserver', '8000', '--noreload' `
+  $django = Start-Process -FilePath $py -ArgumentList 'manage.py', 'runserver', '8100', '--noreload' `
     -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput $dOut -RedirectStandardError $dErr
 
-  $rUp = Wait-Up 'http://localhost:8002/health' 30
-  $dUp = Wait-Up 'http://localhost:8000/api/v1/schema/' 45
+  $rUp = Wait-Up 'http://localhost:8202/health' 30
+  $dUp = Wait-Up 'http://localhost:8100/api/v1/schema/' 45
   Write-Output "renderer_up=$rUp django_up=$dUp"
 
   # 6) Run the E2E driver and capture evidence.
   if ($rUp -and $dUp) {
     $env:BACKEND_CORE_DIR  = $backendDir
-    $env:RENDERER_JOBS_URL = 'http://localhost:8002/jobs/'
+    $env:RENDERER_JOBS_URL = 'http://localhost:8202/jobs/'
     Write-Output '----- E2E RESULTS -----'
     & $py (Join-Path $rendererDir 'scripts\e2e_backend_core.py') 2>&1 | Tee-Object -FilePath (Join-Path $logDir 'e2e_results.json')
     Write-Output '----- END E2E RESULTS -----'

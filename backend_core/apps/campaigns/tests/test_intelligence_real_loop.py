@@ -9,11 +9,11 @@ How to run (see prompt_09 report for the full checklist):
     # 1) start the engine (separate terminal), with a known token
     cd intelligence_engine
     INTERNAL_API_TOKEN=real-loop-token-123 APP_ENV=development \
-        venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+        venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8201
 
     # 2) run this test pointed at it
     cd backend_core
-    RUN_REAL_IE=1 REAL_IE_BASE_URL=http://127.0.0.1:8001 \
+    RUN_REAL_IE=1 REAL_IE_BASE_URL=http://127.0.0.1:8201 \
         REAL_IE_TOKEN=real-loop-token-123 \
         venv/Scripts/python.exe -m pytest apps/campaigns/tests/test_intelligence_real_loop.py -q
 """
@@ -41,7 +41,7 @@ pytestmark = [
     ),
 ]
 
-BASE_URL = os.environ.get("REAL_IE_BASE_URL", "http://127.0.0.1:8001")
+BASE_URL = os.environ.get("REAL_IE_BASE_URL", "http://127.0.0.1:8201")
 TOKEN = os.environ.get("REAL_IE_TOKEN", "real-loop-token-123")
 
 

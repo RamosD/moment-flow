@@ -1,12 +1,14 @@
 import { useId, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import type { Campaign } from '@/entities/campaign'
-import type {
-  CreateCampaignActionInput,
-  SupportedCampaignActionType,
+import type { CampaignActionPriority } from '@/entities/campaign-action'
+import {
+  campaignActionKeys,
+  campaignActionTypeLabel,
+  useAllCampaignActionsByRecommendationType,
 } from '@/entities/campaign-action'
-import { useCreateCampaignAction } from '@/entities/campaign-action'
 import { useContentPacks } from '@/entities/content-pack'
 import { ValidationError } from '@/shared/api'
 import type { FieldErrors } from '@/shared/api'
@@ -21,20 +23,41 @@ import {
   Textarea,
 } from '@/shared/ui'
 
-import { SUPPORTED_ACTION_TYPE_OPTIONS } from './action-type-options'
+import {
+  CAMPAIGN_ACTION_PRIORITY_OPTIONS,
+  RECOMMENDATION_CREATE_ACTION_TYPE_OPTIONS,
+} from './action-type-options'
+import type { RecommendationCreateActionType } from './action-type-options'
 import type { RecommendationActionDraft } from './recommendation-action-draft'
+import {
+  findActiveRecommendationAction,
+  matchRecommendationActions,
+} from './recommendation-action-match'
+import { RecommendationActionState } from './RecommendationActionState'
+import {
+  CampaignActionPartialSuccessError,
+  useCreateActionFromRecommendation,
+} from './useCreateActionFromRecommendation'
+import type { CreateActionFromRecommendationMutationInput } from './useCreateActionFromRecommendation'
 import styles from './campaign-actions.module.css'
 
 interface CreateActionFromRecommendationDialogProps {
   open: boolean
   onClose: () => void
   draft: RecommendationActionDraft
-  /** Source campaign — supplies the real required FKs (campaign, artist, track). */
   campaign: Campaign
   workspaceId: string | null
 }
 
-/** Join DRF field errors for one backend field into a single message. */
+const NON_VISIBLE_ERROR_FIELDS = [
+  'recommendation_ref',
+  'recommendation_snapshot',
+  'related_report',
+  'related_media_kit',
+  'related_content_pack_request',
+  'dismiss_reason',
+] as const
+
 function fieldError(
   fieldErrors: FieldErrors | undefined,
   ...keys: string[]
@@ -47,13 +70,29 @@ function fieldError(
   return undefined
 }
 
-/**
- * Confirm-and-create dialog: turns a recommendation draft into a real Backend
- * Core artifact (report / media kit / content-pack request). Pre-fills from the
- * draft, lets the user adjust title/description/type, validates required fields,
- * surfaces per-field 422 errors, and closes on success. No fake persistence —
- * every submit hits a real endpoint via {@link useCreateCampaignAction}.
- */
+function nonVisibleFieldError(fieldErrors: FieldErrors | undefined) {
+  if (!fieldErrors) return undefined
+  const messages = NON_VISIBLE_ERROR_FIELDS.flatMap((field) =>
+    (fieldErrors[field] ?? []).map((message) => `${field}: ${message}`),
+  )
+  return messages.length > 0 ? messages.join(' ') : undefined
+}
+
+function unwrapMutationError(error: unknown): unknown {
+  return error instanceof CampaignActionPartialSuccessError
+    ? error.cause
+    : error
+}
+
+function isDuplicateError(error: unknown): boolean {
+  const unwrapped = unwrapMutationError(error)
+  if (!(unwrapped instanceof ValidationError)) return false
+  return (unwrapped.fieldErrors?.recommendation_ref ?? []).some((message) =>
+    /already exists|active action/i.test(message),
+  )
+}
+
+/** Create an artifact (when required) and then its persistent CampaignAction. */
 export function CreateActionFromRecommendationDialog({
   open,
   onClose,
@@ -62,23 +101,67 @@ export function CreateActionFromRecommendationDialog({
   workspaceId,
 }: CreateActionFromRecommendationDialogProps) {
   const formId = useId()
+  const queryClient = useQueryClient()
   const [title, setTitle] = useState(draft.title)
   const [description, setDescription] = useState(draft.description ?? '')
-  const [actionType, setActionType] = useState<SupportedCampaignActionType>(
-    draft.suggestedActionType ?? 'report_request',
+  const [actionType, setActionType] = useState<RecommendationCreateActionType>(
+    draft.suggestedActionType ?? 'manual_task',
   )
-  const [priority, setPriority] = useState(draft.priority ?? '')
+  const [priority, setPriority] =
+    useState<CampaignActionPriority>(draft.priority)
   const [contentPackId, setContentPackId] = useState('')
-  const [localError, setLocalError] = useState<{
+  const [localErrors, setLocalErrors] = useState<{
     title?: string
-    contentPack?: string
+    content_pack?: string
   }>({})
 
-  const mutation = useCreateCampaignAction(workspaceId, campaign.id)
+  const mutation = useCreateActionFromRecommendation(workspaceId)
+  const exactTypeQuery = useAllCampaignActionsByRecommendationType(
+    workspaceId,
+    campaign.id,
+    draft.recommendationRef.ref,
+    actionType,
+  )
+  const exactTypeActions = matchRecommendationActions(
+    draft,
+    exactTypeQuery.data?.results,
+  )
+  const activeAction = findActiveRecommendationAction(
+    exactTypeActions,
+    actionType,
+  )
+  const partialError =
+    mutation.error instanceof CampaignActionPartialSuccessError
+      ? mutation.error
+      : null
+  const effectiveSubmitError = unwrapMutationError(mutation.error)
+  const fieldErrors =
+    effectiveSubmitError instanceof ValidationError
+      ? effectiveSubmitError.fieldErrors
+      : undefined
+  const duplicateError = isDuplicateError(mutation.error)
+  const derivedFieldError = nonVisibleFieldError(fieldErrors)
+  const generalError =
+    effectiveSubmitError &&
+    !partialError &&
+    !duplicateError &&
+    !derivedFieldError &&
+    !fieldError(
+      fieldErrors,
+      'title',
+      'description',
+      'priority',
+      'content_pack',
+    )
+      ? resolveErrorPreset(effectiveSubmitError)
+      : null
+  const busy = mutation.isPending
+  const locked = busy || Boolean(partialError)
+  const exactLookupReady = !exactTypeQuery.isPending && !exactTypeQuery.isError
 
   const contentPacksQuery = useContentPacks(
     workspaceId,
-    actionType === 'content_pack',
+    actionType === 'content_pack' && !locked,
   )
   const contentPackOptions = useMemo(
     () =>
@@ -89,92 +172,189 @@ export function CreateActionFromRecommendationDialog({
     [contentPacksQuery.data],
   )
 
-  const submitError = mutation.error
-  const fieldErrors =
-    submitError instanceof ValidationError ? submitError.fieldErrors : undefined
-
-  function buildInput(): CreateCampaignActionInput {
-    const trimmedTitle = title.trim()
-    const metadata: Record<string, string> = {}
-    if (description.trim()) metadata.action_description = description.trim()
-    if (priority.trim()) metadata.action_priority = priority.trim()
-    const base = {
-      campaignId: campaign.id,
-      recommendationRef: draft.recommendationRef.ref,
+  function buildInput(): CreateActionFromRecommendationMutationInput {
+    const campaignActionBase = {
+      campaign: campaign.id,
+      recommendation_ref: draft.recommendationRef.ref,
+      recommendation_snapshot: draft.recommendationSnapshot,
+      title: title.trim(),
+      description: description.trim(),
+      priority,
       source: draft.source,
-      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-      trackId: campaign.track ?? null,
     }
+
     switch (actionType) {
-      case 'report_request':
+      case 'manual_task':
         return {
-          ...base,
-          type: 'report_request',
-          title: trimmedTitle,
-          artistId: campaign.artist,
-        }
-      case 'media_kit_request':
-        return {
-          ...base,
-          type: 'media_kit_request',
-          title: trimmedTitle,
-          artistId: campaign.artist,
+          mode: 'create',
+          campaignAction: {
+            ...campaignActionBase,
+            action_type: 'manual_task',
+          },
         }
       case 'content_pack':
         return {
-          ...base,
-          type: 'content_pack',
-          contentPackId,
-          title: trimmedTitle,
-          artistId: campaign.artist,
+          mode: 'create',
+          campaignAction: {
+            ...campaignActionBase,
+            action_type: 'content_pack',
+          },
+          artifact: {
+            content_pack: contentPackId,
+            artist: campaign.artist,
+            track: campaign.track ?? null,
+          },
+        }
+      case 'report_request':
+        return {
+          mode: 'create',
+          campaignAction: {
+            ...campaignActionBase,
+            action_type: 'report_request',
+          },
+          artifact: {
+            artist: campaign.artist,
+            track: campaign.track ?? null,
+          },
+        }
+      case 'media_kit_request':
+        return {
+          mode: 'create',
+          campaignAction: {
+            ...campaignActionBase,
+            action_type: 'media_kit_request',
+          },
+          artifact: {
+            artist: campaign.artist,
+            track: campaign.track ?? null,
+          },
         }
     }
   }
 
-  const busy = mutation.isPending
-
   function handleClose() {
-    if (busy) return
+    if (busy || partialError?.retryable) return
     mutation.reset()
-    setLocalError({})
+    setLocalErrors({})
+    onClose()
+  }
+
+  async function refreshDuplicate(error: unknown) {
+    if (!isDuplicateError(error)) return
+    await Promise.all([
+      exactTypeQuery.refetch(),
+      queryClient.invalidateQueries({
+        queryKey: campaignActionKeys.recommendationRoot(
+          workspaceId,
+          campaign.id,
+          draft.recommendationRef.ref,
+        ),
+      }),
+    ])
+  }
+
+  function handleSuccess() {
+    mutation.reset()
     onClose()
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy || partialError || !exactLookupReady || activeAction) return
 
-    const nextLocal: { title?: string; contentPack?: string } = {}
-    if (!title.trim()) nextLocal.title = 'Title is required.'
+    const nextErrors: typeof localErrors = {}
+    if (!title.trim()) nextErrors.title = 'Title is required.'
     if (actionType === 'content_pack' && !contentPackId) {
-      nextLocal.contentPack = 'Choose a content pack.'
+      nextErrors.content_pack = 'Choose a content pack.'
     }
-    setLocalError(nextLocal)
-    if (Object.keys(nextLocal).length > 0) return
+    setLocalErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) return
 
     mutation.mutate(buildInput(), {
-      onSuccess: () => {
-        mutation.reset()
-        onClose()
-      },
+      onError: (error) => void refreshDuplicate(error),
+      onSuccess: handleSuccess,
     })
   }
 
-  // Show a general alert for any error that isn't already surfaced inline on a
-  // visible field — so a 422 on a derived field (artist/campaign) is never silent.
-  const visibleFieldErrored = Boolean(
-    fieldError(fieldErrors, 'title') || fieldError(fieldErrors, 'content_pack'),
-  )
-  const generalError =
-    submitError && !visibleFieldErrored ? resolveErrorPreset(submitError) : null
+  function handleRetryCampaignAction() {
+    if (!partialError?.retryable || busy) return
+    mutation.mutate(
+      {
+        mode: 'retry_campaign_action',
+        partial: partialError.partial,
+      },
+      {
+        onError: (error) => void refreshDuplicate(error),
+        onSuccess: handleSuccess,
+      },
+    )
+  }
 
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Create action"
-      description="Turn this recommendation into a tracked artifact in the Backend Core."
+      title="Create campaign action"
+      description="Artifact-backed actions create the artifact first, then register a persistent CampaignAction with the related id."
     >
       <form id={formId} className={styles.form} onSubmit={handleSubmit}>
+        {partialError && (
+          <Alert variant="warning" title="Artifact created; action not registered">
+            <p>
+              {partialError.message} No artifact rollback or automatic artifact
+              retry was attempted.
+            </p>
+            {derivedFieldError && <p>{derivedFieldError}</p>}
+            <p className={styles.artifactReference}>
+              {partialError.partial.artifact.kind}:{' '}
+              {partialError.partial.artifact.id}
+            </p>
+            {partialError.retryable ? (
+              <div className={styles.partialActions}>
+                <Button
+                  type="button"
+                  variant="warning"
+                  size="sm"
+                  disabled={busy}
+                  onClick={handleRetryCampaignAction}
+                >
+                  {busy ? 'Checking…' : 'Retry CampaignAction only'}
+                </Button>
+              </div>
+            ) : (
+              <p>Retry is disabled because the artifact scope/relation conflicts.</p>
+            )}
+          </Alert>
+        )}
+        {duplicateError && !partialError && (
+          <Alert variant="warning" title="Action already exists">
+            An active action of this type already exists for this recommendation.
+            The exact CampaignAction state has been refreshed.
+          </Alert>
+        )}
+        {exactTypeQuery.isError && !partialError && (
+          <Alert variant="danger" title="Could not verify existing action">
+            Creation is disabled until the exact recommendation and action type
+            lookup succeeds.
+          </Alert>
+        )}
+        {activeAction && !partialError && (
+          <Alert
+            variant="info"
+            title={`Active ${campaignActionTypeLabel(actionType)} action exists`}
+          >
+            <p>
+              Only this action type is blocked. Choose another type, or create a
+              new one after this action becomes failed, dismissed or cancelled.
+            </p>
+            <RecommendationActionState actions={[activeAction]} totalCount={1} />
+          </Alert>
+        )}
+        {derivedFieldError && !duplicateError && !partialError && (
+          <Alert variant="danger" title="Campaign action could not be created">
+            {derivedFieldError}
+          </Alert>
+        )}
         {generalError && (
           <Alert variant="danger" title={generalError.title}>
             {generalError.description}
@@ -185,16 +365,19 @@ export function CreateActionFromRecommendationDialog({
           label="Action type"
           htmlFor={`${formId}-type`}
           required
-          hint="Only types backed by the Backend Core are listed."
+          hint="Mark reviewed and dismiss are handled by their dedicated decision flows."
         >
           <Select
             id={`${formId}-type`}
-            options={SUPPORTED_ACTION_TYPE_OPTIONS}
+            options={RECOMMENDATION_CREATE_ACTION_TYPE_OPTIONS}
             value={actionType}
-            disabled={busy}
-            onChange={(event) =>
-              setActionType(event.target.value as SupportedCampaignActionType)
-            }
+            disabled={locked}
+            onChange={(event) => {
+              mutation.reset()
+              setActionType(
+                event.target.value as RecommendationCreateActionType,
+              )
+            }}
           />
         </FormField>
 
@@ -202,12 +385,12 @@ export function CreateActionFromRecommendationDialog({
           label="Title"
           htmlFor={`${formId}-title`}
           required
-          error={localError.title ?? fieldError(fieldErrors, 'title')}
+          error={localErrors.title ?? fieldError(fieldErrors, 'title')}
         >
           <Input
             id={`${formId}-title`}
             value={title}
-            disabled={busy}
+            disabled={locked}
             onChange={(event) => setTitle(event.target.value)}
           />
         </FormField>
@@ -215,10 +398,10 @@ export function CreateActionFromRecommendationDialog({
         {actionType === 'content_pack' && (
           <FormField
             label="Content pack"
-            htmlFor={`${formId}-pack`}
+            htmlFor={`${formId}-content-pack`}
             required
             error={
-              localError.contentPack ?? fieldError(fieldErrors, 'content_pack')
+              localErrors.content_pack ?? fieldError(fieldErrors, 'content_pack')
             }
             hint={
               contentPacksQuery.isError
@@ -227,7 +410,7 @@ export function CreateActionFromRecommendationDialog({
             }
           >
             <Select
-              id={`${formId}-pack`}
+              id={`${formId}-content-pack`}
               options={contentPackOptions}
               placeholder={
                 contentPacksQuery.isPending
@@ -237,7 +420,7 @@ export function CreateActionFromRecommendationDialog({
                     : 'Select a content pack'
               }
               value={contentPackId}
-              disabled={busy || contentPacksQuery.isPending}
+              disabled={locked || contentPacksQuery.isPending}
               onChange={(event) => setContentPackId(event.target.value)}
             />
           </FormField>
@@ -246,12 +429,13 @@ export function CreateActionFromRecommendationDialog({
         <FormField
           label="Description"
           htmlFor={`${formId}-description`}
-          hint="Optional. Stored with the artifact."
+          hint="Optional. Stored as a top-level CampaignAction field."
+          error={fieldError(fieldErrors, 'description')}
         >
           <Textarea
             id={`${formId}-description`}
             value={description}
-            disabled={busy}
+            disabled={locked}
             onChange={(event) => setDescription(event.target.value)}
           />
         </FormField>
@@ -259,27 +443,53 @@ export function CreateActionFromRecommendationDialog({
         <FormField
           label="Priority"
           htmlFor={`${formId}-priority`}
-          hint="Optional. Recorded in metadata (not a backend status)."
+          required
+          hint="Stored as a top-level CampaignAction field."
+          error={fieldError(fieldErrors, 'priority')}
         >
-          <Input
+          <Select
             id={`${formId}-priority`}
+            options={CAMPAIGN_ACTION_PRIORITY_OPTIONS}
             value={priority}
-            disabled={busy}
-            onChange={(event) => setPriority(event.target.value)}
+            disabled={locked}
+            onChange={(event) =>
+              setPriority(event.target.value as CampaignActionPriority)
+            }
           />
         </FormField>
+
+        <Alert variant="info" title="Recommendation context">
+          Source, recommendation_ref and the safe recommendation_snapshot are
+          recorded automatically as canonical CampaignAction fields.
+        </Alert>
 
         <div className={styles.formActions}>
           <Button
             type="button"
             variant="secondary"
             onClick={handleClose}
-            disabled={busy}
+            disabled={busy || Boolean(partialError?.retryable)}
           >
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? 'Creating…' : 'Create action'}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={
+              locked ||
+              (actionType === 'content_pack' &&
+                contentPacksQuery.isPending) ||
+              !exactLookupReady ||
+              Boolean(activeAction)
+            }
+          >
+            {busy
+              ? 'Creating…'
+              : activeAction
+                ? 'Active action exists'
+                : exactTypeQuery.isPending
+                  ? 'Checking existing action…'
+                  : 'Create campaign action'}
           </Button>
         </div>
       </form>

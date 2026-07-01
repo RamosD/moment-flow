@@ -40,3 +40,11 @@ export interface Report {
   storage_asset?: UUID | null
   metadata?: Metadata
 }
+
+export interface CreateReportPayload {
+  campaign: UUID
+  title: string
+  report_type?: ReportType
+  artist?: UUID | null
+  track?: UUID | null
+}

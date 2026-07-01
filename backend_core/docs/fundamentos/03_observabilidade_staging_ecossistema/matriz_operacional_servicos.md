@@ -31,19 +31,17 @@
 
 | Serviço | Directório | Porta default | Healthcheck | Comando de arranque | DB própria |
 |---|---|---|---|---|---|
-| `backend_core` (Django) | `backend_core/` | **8000** | `GET /api/v1/system/health/dependencies/` (agregado, **staff-only**) | `python manage.py runserver` | Sim (SQLite/PostgreSQL) |
-| `intelligence_engine` (FastAPI) | `intelligence_engine/` | **8001** | `GET /health` (público) | `uvicorn app.main:app --port 8001` | Não (stateless) |
-| `content_renderer` (Express/TS) | `content_renderer/` | **8002** | `GET /health` (público) | `npm run dev` ou `npm start` | Não (storage local) |
-| `report_renderer` (lógico) | = `content_renderer/` | **8003 na config / 8002 na prática** ⚠️ | `GET /health` | (mesmo processo do renderer) | Não |
+| `backend_core` (Django) | `backend_core/` | **8100** | `GET /api/v1/system/health/dependencies/` (agregado, **staff-only**) | `python manage.py runserver 127.0.0.1:8100` | Sim (SQLite/PostgreSQL) |
+| `intelligence_engine` (FastAPI) | `intelligence_engine/` | **8201** | `GET /health` (público) | `uvicorn app.main:app --port 8201` | Não (stateless) |
+| `content_renderer` (Express/TS) | `content_renderer/` | **8202** | `GET /health` (público) | `npm run dev` ou `npm start` | Não (storage local) |
+| `report_renderer` (lógico) | = `content_renderer/` | **8202** (mesmo processo) | `GET /health` | (mesmo processo do renderer) | Não |
 | PostgreSQL (staging/E2E) | `content_renderer/docker-compose.e2e.yml` | **55432→5432** (E2E) / 5432 (local) | `pg_isready` / `docker inspect … Health` | `docker compose -f docker-compose.e2e.yml up -d` | — |
 
-> ⚠️ **Discrepância de porta do report renderer (G9):** `REPORT_RENDERER_BASE_URL`
-> tem default `http://localhost:8003`, mas o renderer único serve os três tipos de
-> job (`content_generation`, `report_generation`, `media_kit_generation`) numa só
-> porta (8002). Em local/staging, aponta-se `REPORT_RENDERER_BASE_URL=http://localhost:8002`
-> (foi o que o harness E2E fez). **Como validar:** `curl http://localhost:8002/health`
-> responde; `curl http://localhost:8003/health` falha (nenhum processo nessa porta),
-> salvo se subires deliberadamente um segundo renderer em 8003.
+> ℹ️ **Renderer único (G9, resolvido):** o `content_renderer` serve
+> `content_generation`, `report_generation` e `media_kit_generation` na mesma
+> porta **8202**. Tanto `CONTENT_RENDERER_BASE_URL` como `REPORT_RENDERER_BASE_URL`
+> apontam para `:8202` — os defaults no `config/settings.py` já reflectem isto.
+> **Como validar:** `curl http://localhost:8202/health` responde.
 
 ---
 
@@ -54,9 +52,9 @@
 | **Descrição** | Plano de produto SaaS: auth/JWT, multi-tenancy, RBAC, catálogo, campanhas, content, smart links, billing, reports, media kits, auditoria. Orquestra os serviços técnicos (IE síncrono; renderer via jobs+callback). |
 | **Directório** | `backend_core/` |
 | **Stack** | Django 6 / DRF 3.17, Python 3.13, SimpleJWT, drf-spectacular, WhiteNoise, python-decouple, psycopg |
-| **Porta default** | **8000** (`runserver`) |
+| **Porta default** | **8100** (`runserver 127.0.0.1:8100`) |
 | **Instalação/preparação** | `python -m venv venv` → `.\venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` → (opcional) `Copy-Item .env.example .env` → `python manage.py migrate` → seeds (`seed_rbac`, `seed_billing`, `seed_content`) → (opcional) `createsuperuser` |
-| **Comando de arranque** | `python manage.py runserver` (→ `http://127.0.0.1:8000/`) |
+| **Comando de arranque** | `python manage.py runserver 127.0.0.1:8100` (→ `http://127.0.0.1:8100/`) |
 | **Healthcheck** | **Agregado:** `GET /api/v1/system/health/dependencies/` (OBS-STG-003) — **staff-only** (`IsAdminUser`), sonda IE + renderer (`/health` público, sem token) + base de dados; devolve sempre **200** com `status` geral (`ok\|degraded\|unavailable`) e por dependência (`ok\|degraded\|unavailable\|misconfigured\|unknown`) + `duration_ms`; URLs reduzidas a `configured`/`not_configured`. Timeout: `HEALTHCHECK_DEPENDENCY_TIMEOUT_SECONDS` (default 2s). Proxy de readiness sem auth (até existir liveness próprio): `GET /api/v1/schema/`. |
 | **Logs relevantes** | Loggers `campaigns.intelligence`, `integrations_bridge` (inclui `event=health_check overall=…`), `integrations_bridge.client`, `integrations_bridge.intelligence` (formato `key=value`). `config/settings.py` define agora `LOGGING` (OBS-STG-006): consola estruturada, nível `LOG_LEVEL` (default INFO) para `integrations_bridge*` e `campaigns.intelligence`. Os logs de job incluem `external_job_id` (correlação de callbacks). Tokens nunca logados (redacção + `_FORBIDDEN_KEYS`). |
 
@@ -75,20 +73,20 @@
 
 | Variável | Tipo | Default | Notas |
 |---|---|---|---|
-| `CORS_ALLOWED_ORIGINS` | ⚙️ | `http://localhost:5173,…` | Origem do frontend. |
+| `CORS_ALLOWED_ORIGINS` | ⚙️ | `http://localhost:5200,…` | Origem do frontend. |
 | `DB_ENGINE` | ⚙️ | `sqlite` | `postgres` para multi-processo fiável (ver §6). |
 | `DB_NAME` / `DB_USER` / `DB_HOST` / `DB_PORT` | ⚙️ | — | Só com `DB_ENGINE=postgres`. |
 | `DB_PASSWORD` | 🔒 | — | Só com PostgreSQL. |
 | `ACCESS_TOKEN_LIFETIME_MINUTES` / `REFRESH_TOKEN_LIFETIME_DAYS` | ⚙️ | `60` / `7` | JWT. |
-| `BACKEND_PUBLIC_BASE_URL` | ⚙️ | `http://localhost:8000` | Base do `callback_url` enviado ao renderer. |
-| `INTELLIGENCE_ENGINE_BASE_URL` | ⚙️ | `http://localhost:8001` | Alvo do client síncrono IE. |
+| `BACKEND_PUBLIC_BASE_URL` | ⚙️ | `http://localhost:8100` | Base do `callback_url` enviado ao renderer. |
+| `INTELLIGENCE_ENGINE_BASE_URL` | ⚙️ | `http://localhost:8201` | Alvo do client síncrono IE. |
 | `INTELLIGENCE_ENGINE_TIMEOUT_SECONDS` | ⚙️ | `10` | Timeout do client IE. |
 | `INTELLIGENCE_ENGINE_INTERNAL_TOKEN` | 🔒 | vazio → reutiliza `INTERNAL_API_TOKEN` | Token `X-Internal-Token` para o IE. |
 | `INTELLIGENCE_ENGINE_ENABLED` | ⚙️ | `True` | `False` ⇒ 503 `intelligence_disabled`. |
 | `INTELLIGENCE_ENGINE_DRY_RUN` | ⚙️ | `False` | `True` ⇒ stub sem HTTP. **Smoke real exige `False`.** |
 | `INTELLIGENCE_ENGINE_MAX_RETRIES` / `..._RETRY_BACKOFF_SECONDS` | ⚙️ | `1` / `0.5` | Retry só de transitórios. |
-| `CONTENT_RENDERER_BASE_URL` / `..._TIMEOUT_SECONDS` | ⚙️ | `http://localhost:8002` / `30` | `content_generation`. |
-| `REPORT_RENDERER_BASE_URL` / `..._TIMEOUT_SECONDS` | ⚙️ | `http://localhost:8003` / `30` | ⚠️ apontar para `:8002` na prática (ver §1). |
+| `CONTENT_RENDERER_BASE_URL` / `..._TIMEOUT_SECONDS` | ⚙️ | `http://localhost:8202` / `30` | `content_generation`. |
+| `REPORT_RENDERER_BASE_URL` / `..._TIMEOUT_SECONDS` | ⚙️ | `http://localhost:8202` / `30` | renderer único — aponta ao mesmo serviço que `CONTENT_RENDERER_BASE_URL`. |
 | `INTERNAL_CALLBACK_PATH` | ⚙️ | `/api/v1/internal/jobs/callback/` | Combinado com `BACKEND_PUBLIC_BASE_URL`. |
 | `EXTERNAL_JOBS_ENABLED` | ⚙️ | `True` | `False` ⇒ jobs ficam `queued`. |
 | `EXTERNAL_JOBS_DRY_RUN` | ⚙️ | `False` | `True` ⇒ submissão simulada. **Smoke real exige `False`.** |
@@ -109,8 +107,8 @@ DB_PASSWORD=<DB_PASSWORD>
 ### 2.2 Dependências — `backend_core`
 
 - **Base de dados** própria (SQLite local / PostgreSQL staging).
-- **Intelligence Engine** (`:8001`) — chamada síncrona dentro do request.
-- **Content Renderer** (`:8002`) — submissão de jobs + recepção de callback.
+- **Intelligence Engine** (`:8201`) — chamada síncrona dentro do request.
+- **Content Renderer** (`:8202`) — submissão de jobs + recepção de callback.
 - É o **único ponto de orquestração**; recebe callbacks de volta do renderer.
 
 ---
@@ -122,9 +120,9 @@ DB_PASSWORD=<DB_PASSWORD>
 | **Descrição** | Calcula análise, scores/grade, momentos e recomendações de campanha (heurístico, determinístico, explicável). Sem persistência, sem chamar outros serviços. |
 | **Directório** | `intelligence_engine/` |
 | **Stack** | FastAPI 0.138 + Uvicorn, Pydantic 2 / pydantic-settings, Python 3.13 |
-| **Porta default** | **8001** (não há env `PORT`; a porta vem do CLI `--port 8001`; o Backend Core assume `:8001` por default) |
+| **Porta default** | **8201** (configura por `INTELLIGENCE_ENGINE_PORT=8201` no `.env.example`; a porta efectiva vem do CLI `--port 8201`; o Backend Core assume `:8201` por default) |
 | **Instalação/preparação** | `python -m venv venv` → `venv\Scripts\python.exe -m pip install -r requirements.txt` → (opcional) `cp .env.example .env` |
-| **Comando de arranque** | `venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8001` (em staging, sem `--reload` e com `--host 0.0.0.0` conforme necessário — **por confirmar** o host de staging; validar com `curl http://<host>:8001/health`) |
+| **Comando de arranque** | `venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8201` (em staging, sem `--reload` e com `--host 0.0.0.0` conforme necessário — **por confirmar** o host de staging; validar com `curl http://<host>:8201/health`) |
 | **Healthcheck** | `GET /health` — **público, sem auth**. Resposta: `{ status:"ok", service, version, timestamp }`. *Liveness* apenas (serviço stateless, sem dependências). |
 | **Logs relevantes** | Logger JSON estruturado (UTC) com redacção de chaves sensíveis; loggers do Uvicorn unificados no mesmo formato. Nível por `LOG_LEVEL`. |
 
@@ -160,7 +158,7 @@ INTERNAL_API_TOKEN=<INTERNAL_API_TOKEN>   # mesmo valor do Backend Core e do Ren
 | **Descrição** | Recebe jobs do Backend Core, gera activos (PNG/PDF/HTML), guarda em storage local (MVP) e devolve o resultado via callback interno autenticado. Serve os três tipos de job. |
 | **Directório** | `content_renderer/` |
 | **Stack** | Node ≥18.18 + TypeScript, Express 5, Zod, Sharp (SVG→PNG), pdf-lib, logger JSON próprio |
-| **Porta default** | **8002** (env `PORT`) |
+| **Porta default** | **8202** (env `PORT`) |
 | **Instalação/preparação** | `npm install` → `cp .env.example .env` (Windows: `Copy-Item .env.example .env`) → (para `npm start`) `npm run build` |
 | **Comando de arranque** | `npm run dev` (watch, `tsx`) **ou** `npm run build` + `npm start` (`node dist/server.js`) |
 | **Healthcheck** | `GET /health` — **público, sem auth**. Resposta: `{ status:"ok", service, version, uptime_seconds, timestamp }`. *Liveness*; não reporta storage nem callback. |
@@ -172,13 +170,13 @@ INTERNAL_API_TOKEN=<INTERNAL_API_TOKEN>   # mesmo valor do Backend Core e do Ren
 |---|---|---|---|---|
 | `INTERNAL_API_TOKEN` | 🔒 | **Sim** (salvo dev inseguro) | vazio | **Tem de igualar** o do Backend Core. Vazio rejeitado em prod/dev salvo `ALLOW_INSECURE_EMPTY_TOKEN=true`. |
 | `ALLOW_INSECURE_EMPTY_TOKEN` | ⚙️ | Não | `false` | Só dev: permite token vazio (auth desligada). Rejeitado em produção. |
-| `PORT` | ⚙️ | Não | `8002` | Porta HTTP. |
+| `PORT` | ⚙️ | Não | `8202` | Porta HTTP. |
 | `NODE_ENV` | ⚙️ | Não | `development` | `production` desactiva `GET /files/*`. |
-| `RENDERER_PUBLIC_BASE_URL` | ⚙️ | Não | `http://localhost:8002` | URL público do renderer. |
-| `BACKEND_CORE_BASE_URL` | ⚙️ | Não | `http://localhost:8000` | Alvo dos callbacks. |
+| `RENDERER_PUBLIC_BASE_URL` | ⚙️ | Não | `http://localhost:8202` | URL público do renderer. |
+| `BACKEND_CORE_BASE_URL` | ⚙️ | Não | `http://localhost:8100` | Alvo dos callbacks. |
 | `STORAGE_PROVIDER` | ⚙️ | Não | `local` | Só `local` implementado; valor desconhecido ⇒ falha no arranque. |
 | `LOCAL_STORAGE_ROOT` | ⚙️ | Não | `./storage` | Storage MVP (não produção). |
-| `LOCAL_STORAGE_PUBLIC_BASE_URL` | ⚙️ | Não | `http://localhost:8002/files` | URL de ficheiros locais (dev). |
+| `LOCAL_STORAGE_PUBLIC_BASE_URL` | ⚙️ | Não | `http://localhost:8202/files` | URL de ficheiros locais (dev). |
 | `MAX_JOB_PAYLOAD_BYTES` | ⚙️ | Não | `1048576` | 413 acima do limite. |
 | `CALLBACK_TIMEOUT_SECONDS` | ⚙️ | Não | `20` | Timeout do callback (por tentativa). |
 | `CALLBACK_MAX_ATTEMPTS` | ⚙️ | Não | `3` | `1` desliga retry. |
@@ -190,7 +188,7 @@ INTERNAL_API_TOKEN=<INTERNAL_API_TOKEN>   # mesmo valor do Backend Core e do Ren
 **Secrets (`content_renderer`):** apenas `INTERNAL_API_TOKEN`.
 
 ```dotenv
-PORT=8002
+PORT=8202
 NODE_ENV=development
 INTERNAL_API_TOKEN=<INTERNAL_API_TOKEN>   # mesmo valor do Backend Core e do IE
 # ALLOW_INSECURE_EMPTY_TOKEN=true  # só dev, se quiseres arrancar sem token
@@ -198,7 +196,7 @@ INTERNAL_API_TOKEN=<INTERNAL_API_TOKEN>   # mesmo valor do Backend Core e do IE
 
 ### 4.2 Dependências — `content_renderer`
 
-- **Backend Core** (`:8000`) — **apenas para o callback** (`POST <callback_url>`).
+- **Backend Core** (`:8100`) — **apenas para o callback** (`POST <callback_url>`).
 - Storage **local** (filesystem) — não depende de S3/R2 nesta fase.
 - É **chamado pelo** Backend Core em `POST /jobs` (responde 202; render + callback
   em background).
@@ -248,14 +246,14 @@ nem em logs (redacção activa nos três serviços), nem neste documento.
                               │
                               ▼
                   ┌─────────────────────────┐
-                  │   backend_core  :8000    │  ◄── orquestrador + DB
+                  │   backend_core  :8100    │  ◄── orquestrador + DB
                   └───────────┬──────────────┘
             síncrono          │            jobs (/jobs/)
    X-Internal-Token           │            X-Internal-Token
                   ┌───────────┴───────────┐
                   ▼                       ▼
        intelligence_engine        content_renderer
-              :8001                     :8002
+              :8201                     :8202
        GET /health                GET /health
        POST /intelligence/...     POST /jobs (202) → render → storage local
        (stateless, sem deps)            │ callback X-Internal-Token
@@ -284,10 +282,10 @@ técnico (sem S3/R2, sem Stripe real, sem APIs de terceiros). Docker é dependê
 ## 8. Ordem de arranque recomendada
 
 1. **Base de dados** (se PostgreSQL): `docker compose -f content_renderer/docker-compose.e2e.yml up -d` (ou cluster local) → esperar `healthy`.
-2. **backend_core:** `migrate` + seeds → `runserver` (8000).
-3. **intelligence_engine:** `uvicorn app.main:app --port 8001`.
-4. **content_renderer:** `npm run dev` (ou `build`+`start`) (8002).
-5. **Validar healthchecks:** `curl :8001/health`, `curl :8002/health`, Django via `:8000/api/v1/schema/` (até existir o agregado de OBS-STG-003).
+2. **backend_core:** `migrate` + seeds → `runserver` (8100).
+3. **intelligence_engine:** `uvicorn app.main:app --port 8201`.
+4. **content_renderer:** `npm run dev` (ou `build`+`start`) (8202).
+5. **Validar healthchecks:** `curl :8201/health`, `curl :8202/health`, Django via `:8100/api/v1/schema/` (até existir o agregado de OBS-STG-003).
 
 > O **mesmo `<INTERNAL_API_TOKEN>`** tem de estar definido nos três processos
 > antes do arranque, senão as chamadas internas dão 403.
@@ -324,7 +322,7 @@ técnico (sem S3/R2, sem Stripe real, sem APIs de terceiros). Docker é dependê
 
 | Item | Estado | Como validar |
 |---|---|---|
-| Porta efectiva do report renderer (8003 vs 8002) | Discrepância conhecida (G9) | `curl http://localhost:8002/health` (responde) vs `:8003/health` (falha, salvo 2.º processo). Apontar `REPORT_RENDERER_BASE_URL` para `:8002`. |
+| Porta do renderer (content e report) | Padronizado em 8202 | `curl http://localhost:8202/health` responde. `CONTENT_RENDERER_BASE_URL` e `REPORT_RENDERER_BASE_URL` apontam ambas para `:8202` (ver §1). |
 | Host/bind do IE e do renderer em staging | por confirmar | Definir `--host` (uvicorn) e bind do Node conforme o ambiente; validar com `curl http://<host>:<porta>/health`. |
 | Healthcheck dedicado do Backend Core | ✅ implementado (OBS-STG-003) | `GET /api/v1/system/health/dependencies/` (staff-only). Validar com JWT de utilizador `is_staff`; sem auth → 401, não-staff → 403. Liveness próprio (sem auth) continua por adicionar — entretanto `GET /api/v1/schema/` serve de proxy. |
 | `LOGGING` do Django (visibilidade de INFO) | ✅ implementado (OBS-STG-006) | `config/settings.py` define `LOGGING` (consola, `LOG_LEVEL` default INFO). Validar com `python manage.py shell -c "import logging; print(logging.getLogger('integrations_bridge').getEffectiveLevel())"` → `20`. |

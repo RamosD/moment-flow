@@ -346,7 +346,7 @@ VITE_BACKEND_API_BASE_URL
 Exemplo:
 
 ```text
-VITE_BACKEND_API_BASE_URL=http://localhost:8000/api/v1
+VITE_BACKEND_API_BASE_URL=http://localhost:8100/api/v1
 ```
 
 ## 7.2 Headers esperados

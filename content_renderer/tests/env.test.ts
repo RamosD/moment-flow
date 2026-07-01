@@ -4,11 +4,11 @@ import { loadConfig } from '../src/config/env';
 import { ConfigError } from '../src/errors/errors';
 
 const BASE = {
-  PORT: '8002',
-  RENDERER_PUBLIC_BASE_URL: 'http://localhost:8002',
-  BACKEND_CORE_BASE_URL: 'http://localhost:8000',
+  PORT: '8202',
+  RENDERER_PUBLIC_BASE_URL: 'http://localhost:8202',
+  BACKEND_CORE_BASE_URL: 'http://localhost:8100',
   LOCAL_STORAGE_ROOT: './storage',
-  LOCAL_STORAGE_PUBLIC_BASE_URL: 'http://localhost:8002/files',
+  LOCAL_STORAGE_PUBLIC_BASE_URL: 'http://localhost:8202/files',
   MAX_JOB_PAYLOAD_BYTES: '1048576',
   CALLBACK_TIMEOUT_SECONDS: '20',
   RENDER_TIMEOUT_SECONDS: '30',
@@ -23,7 +23,7 @@ describe('loadConfig', () => {
     });
 
     expect(config.nodeEnv).toBe('development');
-    expect(config.port).toBe(8002);
+    expect(config.port).toBe(8202);
     expect(config.internalApiToken).toBe('dev-secret');
     expect(config.insecureTokenMode).toBe(false);
     expect(config.maxJobPayloadBytes).toBe(1_048_576);
@@ -37,9 +37,9 @@ describe('loadConfig', () => {
       INTERNAL_API_TOKEN: 'x',
     });
 
-    expect(config.port).toBe(8002);
-    expect(config.rendererPublicBaseUrl).toBe('http://localhost:8002');
-    expect(config.backendCoreBaseUrl).toBe('http://localhost:8000');
+    expect(config.port).toBe(8202);
+    expect(config.rendererPublicBaseUrl).toBe('http://localhost:8202');
+    expect(config.backendCoreBaseUrl).toBe('http://localhost:8100');
     expect(config.localStorageRoot).toBe('./storage');
     expect(config.maxJobPayloadBytes).toBe(1_048_576);
     // Storage provider default (R-HARD-005).

@@ -237,8 +237,8 @@ A validação com SQLite apresentou limitações em cenário multi-processo, imp
 
 ```text id="1bbhba"
 backend_core usa PostgreSQL;
-content_renderer corre em localhost:8002;
-Django corre em localhost:8000;
+content_renderer corre em localhost:8202;
+Django corre em localhost:8100;
 Django cria job;
 renderer recebe job;
 renderer gera ficheiro;

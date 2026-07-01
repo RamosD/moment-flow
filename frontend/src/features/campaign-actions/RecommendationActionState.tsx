@@ -1,30 +1,54 @@
 import type { CampaignAction } from '@/entities/campaign-action'
 import {
-  campaignActionStatusLabel,
-  campaignActionStatusVariant,
   campaignActionTypeLabel,
 } from '@/entities/campaign-action'
+import type { BadgeVariant } from '@/shared/ui'
 import { Badge } from '@/shared/ui'
 
+import { recommendationActionDisplayState } from './recommendation-action-match'
 import styles from './campaign-actions.module.css'
 
-/**
- * Compact read-only indicator shown on a recommendation that already has an
- * associated action. Communicates "this recommendation was converted" plus the
- * action's type and current status, so the War Room never re-offers an obvious
- * duplicate.
- */
+const STATE_PRESENTATION = {
+  pending: { label: 'Pending', variant: 'neutral' },
+  in_progress: { label: 'In progress', variant: 'warning' },
+  completed: { label: 'Completed', variant: 'success' },
+  failed: { label: 'Failed', variant: 'danger' },
+  cancelled: { label: 'Cancelled', variant: 'danger' },
+  dismissed: { label: 'Dismissed', variant: 'neutral' },
+  reviewed: { label: 'Reviewed', variant: 'success' },
+} satisfies Record<string, { label: string; variant: BadgeVariant }>
+
+/** Compact state for every persistent action correlated to a recommendation. */
 export function RecommendationActionState({
-  action,
+  actions,
+  totalCount,
 }: {
-  action: CampaignAction
+  actions: CampaignAction[]
+  totalCount: number
 }) {
   return (
     <span className={styles.state}>
-      <Badge variant="info">{campaignActionTypeLabel(action.type)}</Badge>
-      <Badge variant={campaignActionStatusVariant(action.status)}>
-        {campaignActionStatusLabel(action.status)}
-      </Badge>
+      {actions.map((action) => (
+        <span key={action.id} className={styles.stateItem}>
+          <Badge variant="info">
+            {campaignActionTypeLabel(action.action_type)}
+          </Badge>
+          <Badge
+            variant={
+              STATE_PRESENTATION[recommendationActionDisplayState(action)]
+                .variant
+            }
+          >
+            {
+              STATE_PRESENTATION[recommendationActionDisplayState(action)]
+                .label
+            }
+          </Badge>
+        </span>
+      ))}
+      {totalCount > actions.length && (
+        <Badge variant="neutral">+{totalCount - actions.length} more</Badge>
+      )}
     </span>
   )
 }

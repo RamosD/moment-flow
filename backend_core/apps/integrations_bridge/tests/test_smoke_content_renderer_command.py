@@ -68,7 +68,7 @@ def _accepted_response():
 
 
 def _configure(settings, token=SMOKE_TOKEN):
-    settings.CONTENT_RENDERER_BASE_URL = "http://127.0.0.1:8002"
+    settings.CONTENT_RENDERER_BASE_URL = "http://127.0.0.1:8202"
     settings.INTERNAL_API_TOKEN = token
 
 
@@ -168,7 +168,7 @@ class TestSubmission:
 
     def test_report_generation_job_type(self, settings, monkeypatch):
         # report_generation resolves the REPORT_RENDERER endpoint.
-        settings.REPORT_RENDERER_BASE_URL = "http://127.0.0.1:8002"
+        settings.REPORT_RENDERER_BASE_URL = "http://127.0.0.1:8202"
         settings.INTERNAL_API_TOKEN = SMOKE_TOKEN
         calls = []
         monkeypatch.setattr(f"{MODULE}.http_health_probe", _fake_probe((OK, 2, "")))

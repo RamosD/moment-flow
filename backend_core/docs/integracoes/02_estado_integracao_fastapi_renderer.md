@@ -106,7 +106,7 @@ os campos de transporte. Estrutura final enviada ao serviço externo:
   "workspace_id": "<workspace_id>",
   "request_id": "<uuid>",
   "job_type": "content_generation",
-  "callback_url": "http://localhost:8000/api/v1/internal/jobs/callback/",
+  "callback_url": "http://localhost:8100/api/v1/internal/jobs/callback/",
   "entity": { "type": "content_pack_request", "id": "<uuid>" },
   "payload_version": "1.0",
   "payload": {
@@ -169,12 +169,12 @@ checksum/format/title`).
 
 ```text
 INTERNAL_API_TOKEN=                # secret; vazio → todos os callbacks rejeitados
-BACKEND_PUBLIC_BASE_URL=http://localhost:8000
-INTELLIGENCE_ENGINE_BASE_URL=http://localhost:8001
+BACKEND_PUBLIC_BASE_URL=http://localhost:8100
+INTELLIGENCE_ENGINE_BASE_URL=http://localhost:8201
 INTELLIGENCE_ENGINE_TIMEOUT_SECONDS=20
-CONTENT_RENDERER_BASE_URL=http://localhost:8002
+CONTENT_RENDERER_BASE_URL=http://localhost:8202
 CONTENT_RENDERER_TIMEOUT_SECONDS=30
-REPORT_RENDERER_BASE_URL=http://localhost:8003
+REPORT_RENDERER_BASE_URL=http://localhost:8202
 REPORT_RENDERER_TIMEOUT_SECONDS=30
 INTERNAL_CALLBACK_PATH=/api/v1/internal/jobs/callback/
 EXTERNAL_JOBS_ENABLED=true

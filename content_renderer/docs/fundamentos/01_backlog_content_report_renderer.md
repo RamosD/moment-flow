@@ -201,7 +201,7 @@ O renderer deve receber jobs do Django com um envelope semelhante a:
   "workspace_id": "<workspace_id>",
   "request_id": "<request_id>",
   "job_type": "content_generation",
-  "callback_url": "http://localhost:8000/api/v1/internal/jobs/callback/",
+  "callback_url": "http://localhost:8100/api/v1/internal/jobs/callback/",
   "entity": {
     "type": "content_pack_request",
     "id": "<uuid>"
@@ -432,13 +432,13 @@ Centralizar variáveis de ambiente do renderer.
 ### Variáveis mínimas
 
 ```text id="67kaze"
-PORT=8002
+PORT=8202
 NODE_ENV=development
 INTERNAL_API_TOKEN=
-RENDERER_PUBLIC_BASE_URL=http://localhost:8002
-BACKEND_CORE_BASE_URL=http://localhost:8000
+RENDERER_PUBLIC_BASE_URL=http://localhost:8202
+BACKEND_CORE_BASE_URL=http://localhost:8100
 LOCAL_STORAGE_ROOT=./storage
-LOCAL_STORAGE_PUBLIC_BASE_URL=http://localhost:8002/files
+LOCAL_STORAGE_PUBLIC_BASE_URL=http://localhost:8202/files
 MAX_JOB_PAYLOAD_BYTES=1048576
 CALLBACK_TIMEOUT_SECONDS=20
 RENDER_TIMEOUT_SECONDS=30
@@ -1205,8 +1205,8 @@ Validar integração real com o Django já implementado.
 ### Cenário
 
 ```text id="jz5w5w"
-Subir backend_core em localhost:8000.
-Subir content_renderer em localhost:8002.
+Subir backend_core em localhost:8100.
+Subir content_renderer em localhost:8202.
 Configurar INTERNAL_API_TOKEN igual nos dois.
 Configurar CONTENT_RENDERER_BASE_URL no Django.
 Criar content pack request no Django.

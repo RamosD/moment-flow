@@ -1,38 +1,53 @@
-/**
- * `Select` options for choosing a campaign action type, derived from the
- * single source of truth (`CAMPAIGN_ACTION_CAPABILITIES`) so the UI can never
- * drift from what the Backend Core actually supports.
- */
-
-import type { SelectOption } from '@/shared/ui'
-import {
-  CAMPAIGN_ACTION_CAPABILITIES,
-  campaignActionTypeLabel,
-  SUPPORTED_CAMPAIGN_ACTION_TYPES,
+import type {
+  CampaignActionPriority,
+  CampaignActionType,
 } from '@/entities/campaign-action'
-import type { CampaignActionType } from '@/entities/campaign-action'
+import {
+  CAMPAIGN_ACTION_PRIORITIES,
+  CAMPAIGN_ACTION_TYPES,
+  campaignActionPriorityLabel,
+  campaignActionTypeLabel,
+} from '@/entities/campaign-action'
+import type { SelectOption } from '@/shared/ui'
 
-const ALL_ACTION_TYPES = Object.keys(
-  CAMPAIGN_ACTION_CAPABILITIES,
-) as CampaignActionType[]
-
-/** Every action type, with unsupported ones disabled (honest, never hidden). */
-export const ACTION_TYPE_OPTIONS: SelectOption[] = ALL_ACTION_TYPES.map(
-  (type) => {
-    const capability = CAMPAIGN_ACTION_CAPABILITIES[type]
-    return {
-      value: type,
-      label: capability.supported
-        ? campaignActionTypeLabel(type)
-        : `${campaignActionTypeLabel(type)} (unavailable)`,
-      disabled: !capability.supported,
-    }
-  },
-)
-
-/** Only the action types that can actually be created today. */
-export const SUPPORTED_ACTION_TYPE_OPTIONS: SelectOption[] =
-  SUPPORTED_CAMPAIGN_ACTION_TYPES.map((type) => ({
+/** Every type persisted by /campaign-actions/. `asset_request` is absent. */
+export const ACTION_TYPE_OPTIONS: SelectOption[] = CAMPAIGN_ACTION_TYPES.map(
+  (type: CampaignActionType) => ({
     value: type,
     label: campaignActionTypeLabel(type),
+  }),
+)
+
+export const ARTIFACT_CAMPAIGN_ACTION_TYPES = [
+  'content_pack',
+  'report_request',
+  'media_kit_request',
+] as const
+
+export type ArtifactCampaignActionType =
+  (typeof ARTIFACT_CAMPAIGN_ACTION_TYPES)[number]
+
+export type RecommendationCreateActionType =
+  | ArtifactCampaignActionType
+  | 'manual_task'
+
+/**
+ * Mark reviewed and dismiss live in their semantic flows. The remaining four
+ * types are handled by the recommendation create orchestration.
+ */
+export const RECOMMENDATION_CREATE_ACTION_TYPE_OPTIONS: SelectOption[] = [
+  {
+    value: 'manual_task',
+    label: campaignActionTypeLabel('manual_task'),
+  },
+  ...ARTIFACT_CAMPAIGN_ACTION_TYPES.map((type) => ({
+    value: type,
+    label: campaignActionTypeLabel(type),
+  })),
+]
+
+export const CAMPAIGN_ACTION_PRIORITY_OPTIONS: SelectOption[] =
+  CAMPAIGN_ACTION_PRIORITIES.map((priority: CampaignActionPriority) => ({
+    value: priority,
+    label: campaignActionPriorityLabel(priority),
   }))

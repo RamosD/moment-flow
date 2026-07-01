@@ -115,15 +115,15 @@ valores sensíveis — o `INTERNAL_API_TOKEN` vem vazio).
 
 | Variável                       | Descrição                                                    | Default                        |
 | ------------------------------ | ------------------------------------------------------------ | ------------------------------ |
-| `PORT`                         | Porta HTTP                                                    | `8002`                         |
+| `PORT`                         | Porta HTTP                                                    | `8202`                         |
 | `NODE_ENV`                     | `development` \| `production` \| `test`                      | `development`                  |
 | `INTERNAL_API_TOKEN`           | Segredo partilhado com o Django (`X-Internal-Token`)         | _(vazio)_                      |
 | `ALLOW_INSECURE_EMPTY_TOKEN`   | Permite token vazio **apenas** em desenvolvimento            | `false`                        |
-| `RENDERER_PUBLIC_BASE_URL`     | URL público do renderer                                      | `http://localhost:8002`        |
-| `BACKEND_CORE_BASE_URL`        | URL base do Django                                           | `http://localhost:8000`        |
+| `RENDERER_PUBLIC_BASE_URL`     | URL público do renderer                                      | `http://localhost:8202`        |
+| `BACKEND_CORE_BASE_URL`        | URL base do Django                                           | `http://localhost:8100`        |
 | `STORAGE_PROVIDER`             | Backend de storage: `local` (único implementado; `s3`/`r2` futuros) | `local`                |
 | `LOCAL_STORAGE_ROOT`           | Raiz do storage local (MVP, **não** é produção)              | `./storage`                    |
-| `LOCAL_STORAGE_PUBLIC_BASE_URL`| URL base dos ficheiros locais (dev)                          | `http://localhost:8002/files`  |
+| `LOCAL_STORAGE_PUBLIC_BASE_URL`| URL base dos ficheiros locais (dev)                          | `http://localhost:8202/files`  |
 | `MAX_JOB_PAYLOAD_BYTES`        | Tamanho máximo do payload de job (bytes)                     | `1048576`                      |
 | `CALLBACK_TIMEOUT_SECONDS`     | Timeout do callback para o Django (por tentativa)            | `20`                           |
 | `CALLBACK_MAX_ATTEMPTS`        | Tentativas totais de entrega do callback (`>= 1`; `1` desliga retry) | `3`                   |
@@ -259,7 +259,7 @@ content_renderer/
 Liveness probe pública (sem auth).
 
 ```bash
-curl http://localhost:8002/health
+curl http://localhost:8202/health
 ```
 
 ```json
@@ -301,7 +301,7 @@ render + storage + callback correm **depois** do 202, em background
   "workspace_id": "<workspace_id>",
   "request_id": "<request_id>",
   "job_type": "content_generation",
-  "callback_url": "http://localhost:8000/api/v1/internal/jobs/callback/",
+  "callback_url": "http://localhost:8100/api/v1/internal/jobs/callback/",
   "entity": { "type": "content_pack_request", "id": "<uuid>" },
   "payload_version": "1.0",
   "payload": { }
@@ -617,14 +617,14 @@ Django cria ExternalJobReference → POST /jobs/ (renderer) → render → stora
   → POST /api/v1/internal/jobs/callback/ (Django) → Asset + ContentOutput/Report/MediaKit
 ```
 
-**Mapeamento de jobs:** `content_generation` → `content_renderer` (:8002);
+**Mapeamento de jobs:** `content_generation` → `content_renderer` (:8202);
 `report_generation` / `media_kit_generation` → provider `report_renderer` no
-Django (aponta-se `REPORT_RENDERER_BASE_URL=http://localhost:8002`, pois o renderer
+Django (aponta-se `REPORT_RENDERER_BASE_URL=http://localhost:8202`, pois o renderer
 único serve os três tipos).
 
 **Configuração partilhada:** o `INTERNAL_API_TOKEN` tem de ser **igual** nos dois
-serviços. No Django: `CONTENT_RENDERER_BASE_URL`/`REPORT_RENDERER_BASE_URL=http://localhost:8002`,
-`BACKEND_PUBLIC_BASE_URL=http://localhost:8000`, `EXTERNAL_JOBS_ENABLED=true`,
+serviços. No Django: `CONTENT_RENDERER_BASE_URL`/`REPORT_RENDERER_BASE_URL=http://localhost:8202`,
+`BACKEND_PUBLIC_BASE_URL=http://localhost:8100`, `EXTERNAL_JOBS_ENABLED=true`,
 `EXTERNAL_JOBS_DRY_RUN=false`.
 
 Guia + checklist E2E:

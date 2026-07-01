@@ -56,7 +56,7 @@ Variáveis suportadas (ver `.env.example`):
 | `SECRET_KEY` | dev inseguro | **Obrigatório definir em produção.** |
 | `DEBUG` | `True` | `False` em produção. |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | CSV. |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,...` | CSV (origem do frontend). |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5200,...` | CSV (origem do frontend). |
 | `DB_ENGINE` | `sqlite` | `postgres` para usar PostgreSQL. |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | — | Só quando `DB_ENGINE=postgres`. |
 | `ACCESS_TOKEN_LIFETIME_MINUTES` | `60` | JWT access. |
@@ -117,14 +117,14 @@ python manage.py createsuperuser
 ## Runserver
 
 ```powershell
-python manage.py runserver       # http://127.0.0.1:8000/
+python manage.py runserver 127.0.0.1:8100
 ```
 
 Pontos úteis:
 
-- Admin / backoffice: `http://127.0.0.1:8000/admin/`
-- Swagger UI: `http://127.0.0.1:8000/api/v1/docs/`
-- Redoc: `http://127.0.0.1:8000/api/v1/redoc/`
+- Admin / backoffice: `http://127.0.0.1:8100/admin/`
+- Swagger UI: `http://127.0.0.1:8100/api/v1/docs/`
+- Redoc: `http://127.0.0.1:8100/api/v1/redoc/`
 
 ---
 

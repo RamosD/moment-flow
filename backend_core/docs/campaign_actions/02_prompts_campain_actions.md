@@ -641,9 +641,9 @@ Fonte de verdade:
 
 Instruções:
 - Lê o backlog e relatórios anteriores.
-- Confirmar que a porta 8000 está livre ou ocupada pelo Backend Core correcto.
+- Confirmar que a porta 8100 está livre ou ocupada pelo Backend Core correcto.
 - Arrancar Backend Core real em:
-  - http://localhost:8000
+  - http://localhost:8100
 - Confirmar:
   - GET /api/v1/schema/ responde 200;
   - GET /api/v1/docs/ responde 200;

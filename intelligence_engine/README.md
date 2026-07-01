@@ -621,13 +621,13 @@ cp .env.example .env
 ## Execução local
 
 ```bash
-venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8001
+venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8201
 ```
 
 Verificação rápida:
 
 ```bash
-curl http://localhost:8001/health
+curl http://localhost:8201/health
 ```
 
 Resposta esperada:

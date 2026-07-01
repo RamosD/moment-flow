@@ -90,7 +90,7 @@ MIDDLEWARE = [
 # https://github.com/adamchainz/django-cors-headers
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:5173,http://127.0.0.1:5173",
+    default="http://localhost:5200,http://127.0.0.1:5200",
     cast=Csv(),
 )
 # Multi-tenancy header sent by the frontend on every workspace-scoped
@@ -280,11 +280,11 @@ INTERNAL_API_TOKEN = config("INTERNAL_API_TOKEN", default="")
 # submission) or ``EXTERNAL_JOBS_ENABLED=False`` (stay queued) so the product
 # keeps working without them.
 BACKEND_PUBLIC_BASE_URL = config(
-    "BACKEND_PUBLIC_BASE_URL", default="http://localhost:8000"
+    "BACKEND_PUBLIC_BASE_URL", default="http://localhost:8100"
 )
 
 INTELLIGENCE_ENGINE_BASE_URL = config(
-    "INTELLIGENCE_ENGINE_BASE_URL", default="http://localhost:8001"
+    "INTELLIGENCE_ENGINE_BASE_URL", default="http://localhost:8201"
 )
 # The contract's synchronous round-trip is sub-millisecond on the engine side, so
 # wall time is dominated by network/serialization. 10s is an ample margin for an
@@ -328,14 +328,14 @@ INTELLIGENCE_ENGINE_RETRY_BACKOFF_SECONDS = config(
 )
 
 CONTENT_RENDERER_BASE_URL = config(
-    "CONTENT_RENDERER_BASE_URL", default="http://localhost:8002"
+    "CONTENT_RENDERER_BASE_URL", default="http://localhost:8202"
 )
 CONTENT_RENDERER_TIMEOUT_SECONDS = config(
     "CONTENT_RENDERER_TIMEOUT_SECONDS", default=30, cast=int
 )
 
 REPORT_RENDERER_BASE_URL = config(
-    "REPORT_RENDERER_BASE_URL", default="http://localhost:8003"
+    "REPORT_RENDERER_BASE_URL", default="http://localhost:8202"
 )
 REPORT_RENDERER_TIMEOUT_SECONDS = config(
     "REPORT_RENDERER_TIMEOUT_SECONDS", default=30, cast=int

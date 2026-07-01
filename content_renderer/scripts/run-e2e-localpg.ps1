@@ -3,7 +3,7 @@
 #
 # Use this when Docker is unavailable but a local PostgreSQL cluster is reachable
 # (e.g. a throwaway cluster created with the bundled PostgreSQL `initdb`/`pg_ctl`).
-# It migrates + seeds (idempotent), boots the renderer (:8002) and Django (:8000)
+# It migrates + seeds (idempotent), boots the renderer (:8202) and Django (:8100)
 # with the SAME internal token, runs the E2E driver and collects evidence.
 #
 # DB_* come from the environment, with DEV defaults (NOT secrets). Set them to
@@ -15,7 +15,7 @@
 param(
   [switch]$KeepUp,
   # Django port — overridable so the harness can dodge a port already in use.
-  [int]$DjangoPort = 8000
+  [int]$DjangoPort = 8100
 )
 $ErrorActionPreference = 'Continue'
 
@@ -44,13 +44,13 @@ $rOut = Join-Path $logDir 'renderer.out'; $rErr = Join-Path $logDir 'renderer.er
 $dOut = Join-Path $logDir 'django.out';   $dErr = Join-Path $logDir 'django.err'
 
 $env:INTERNAL_API_TOKEN        = $token
-$env:PORT                      = '8002'
+$env:PORT                      = '8202'
 $env:NODE_ENV                  = 'development'
 $env:LOG_LEVEL                 = 'warn'
 $env:STORAGE_PROVIDER          = 'local'
 $env:LOCAL_STORAGE_ROOT        = $storage
-$env:CONTENT_RENDERER_BASE_URL = 'http://localhost:8002'
-$env:REPORT_RENDERER_BASE_URL  = 'http://localhost:8002'
+$env:CONTENT_RENDERER_BASE_URL = 'http://localhost:8202'
+$env:REPORT_RENDERER_BASE_URL  = 'http://localhost:8202'
 # The seeded jobs' callback_url is built from BACKEND_PUBLIC_BASE_URL, so it must
 # point at THIS harness's Django (DjangoPort), never a stray server.
 $env:BACKEND_PUBLIC_BASE_URL   = "http://localhost:$DjangoPort"
@@ -82,13 +82,13 @@ try {
     -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput $dOut -RedirectStandardError $dErr
 
-  $rUp = Wait-Up 'http://localhost:8002/health' 30
+  $rUp = Wait-Up 'http://localhost:8202/health' 30
   $dUp = Wait-Up "http://localhost:$DjangoPort/api/v1/schema/" 60
   Write-Output "renderer_up=$rUp django_up=$dUp"
 
   if ($rUp -and $dUp) {
     $env:BACKEND_CORE_DIR  = $backendDir
-    $env:RENDERER_JOBS_URL = 'http://localhost:8002/jobs/'
+    $env:RENDERER_JOBS_URL = 'http://localhost:8202/jobs/'
     Write-Output '----- E2E RESULTS -----'
     & $py (Join-Path $rendererDir 'scripts\e2e_backend_core.py') 2>&1 | Tee-Object -FilePath (Join-Path $logDir 'e2e_results.json')
     Write-Output '----- END E2E RESULTS -----'

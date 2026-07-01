@@ -1,59 +1,111 @@
-/**
- * Match a recommendation to an already-created campaign action (CA-009).
- *
- * The Backend Core has NO relational link between a recommendation and the
- * artifact created from it — the only correlation is the frontend-derived
- * `recommendation_ref` written into the artifact `metadata` bag (see
- * `entities/campaign-action/campaign-action-api.ts`). Matching is therefore
- * best-effort: it works for actions this frontend created, and silently finds
- * nothing for artifacts created by other means. This limitation is documented
- * in the phase report — it is not a backend guarantee.
- */
-
-import type { CampaignAction } from '@/entities/campaign-action'
+import type {
+  CampaignAction,
+  CampaignActionStatus,
+  CampaignActionType,
+} from '@/entities/campaign-action'
 
 import type { RecommendationActionDraft } from './recommendation-action-draft'
 
-/** Coarse execution state of a recommendation, derived from its matched action. */
 export type RecommendationExecutionState =
   | 'not_started'
-  | 'action_created'
+  | 'pending'
   | 'in_progress'
   | 'completed'
   | 'failed'
+  | 'dismissed'
   | 'cancelled'
+  | 'reviewed'
 
-/**
- * Find the action whose stored `recommendation_ref` equals this draft's ref.
- * Returns `null` when none matches (recommendation not yet converted, or its
- * action was created outside this frontend convention).
- */
-export function matchRecommendationAction(
-  draft: RecommendationActionDraft | null,
+export type RecommendationActionDisplayState = Exclude<
+  RecommendationExecutionState,
+  'not_started'
+>
+
+export const ACTIVE_CAMPAIGN_ACTION_STATUSES = new Set<CampaignActionStatus>([
+  'pending',
+  'in_progress',
+  'completed',
+])
+
+/** Group persistent actions by their canonical top-level recommendation ref. */
+export function groupCampaignActionsByRecommendationRef(
   actions: CampaignAction[] | undefined,
-): CampaignAction | null {
-  if (!draft || !actions || actions.length === 0) return null
-  const ref = draft.recommendationRef.ref
-  return actions.find((action) => action.recommendationRef === ref) ?? null
+): Map<string, CampaignAction[]> {
+  const grouped = new Map<string, CampaignAction[]>()
+
+  for (const action of actions ?? []) {
+    const current = grouped.get(action.recommendation_ref)
+    if (current) current.push(action)
+    else grouped.set(action.recommendation_ref, [action])
+  }
+
+  return grouped
 }
 
-/** Map a matched action's normalized status to a recommendation execution state. */
-export function recommendationExecutionState(
-  matched: CampaignAction | null,
-): RecommendationExecutionState {
-  if (!matched) return 'not_started'
-  switch (matched.status) {
-    case 'in_progress':
-      return 'in_progress'
-    case 'completed':
-      return 'completed'
-    case 'failed':
-      return 'failed'
-    case 'cancelled':
-    case 'dismissed':
-      return 'cancelled'
-    // pending / unknown → an action exists but hasn't progressed yet.
-    default:
-      return 'action_created'
+/** Return every persistent action with the recommendation's exact top-level ref. */
+export function matchRecommendationActions(
+  draft: RecommendationActionDraft | null,
+  actions: CampaignAction[] | undefined,
+): CampaignAction[] {
+  if (!draft) return []
+  return (
+    groupCampaignActionsByRecommendationRef(actions).get(
+      draft.recommendationRef.ref,
+    ) ?? []
+  )
+}
+
+export function isActiveCampaignAction(action: CampaignAction): boolean {
+  return ACTIVE_CAMPAIGN_ACTION_STATUSES.has(action.status)
+}
+
+/** The backend permits at most one active action for the same ref + type. */
+export function findActiveRecommendationAction(
+  actions: CampaignAction[],
+  actionType: CampaignActionType,
+): CampaignAction | undefined {
+  return actions.find(
+    (action) =>
+      action.action_type === actionType && isActiveCampaignAction(action),
+  )
+}
+
+/** Translate the persisted lifecycle into the recommendation-facing state. */
+export function recommendationActionDisplayState(
+  action: CampaignAction,
+): RecommendationActionDisplayState {
+  if (
+    action.action_type === 'mark_reviewed' &&
+    action.status === 'completed'
+  ) {
+    return 'reviewed'
   }
+  return action.status
+}
+
+/** Coarse aggregate state retained for callers that need a single summary. */
+export function recommendationExecutionState(
+  actions: CampaignAction[],
+): RecommendationExecutionState {
+  if (actions.length === 0) return 'not_started'
+  if (actions.some((action) => action.status === 'in_progress')) {
+    return 'in_progress'
+  }
+  if (actions.some((action) => action.status === 'pending')) {
+    return 'pending'
+  }
+  if (
+    actions.some(
+      (action) =>
+        recommendationActionDisplayState(action) === 'reviewed',
+    )
+  ) {
+    return 'reviewed'
+  }
+  if (actions.some((action) => action.status === 'completed')) {
+    return 'completed'
+  }
+  if (actions.some((action) => action.status === 'failed')) return 'failed'
+  if (actions.some((action) => action.status === 'dismissed')) return 'dismissed'
+  return 'cancelled'
 }

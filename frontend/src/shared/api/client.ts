@@ -12,21 +12,11 @@
 
 import { ENV } from '@/shared/config'
 
-import {
-  ApiError,
-  ForbiddenError,
-  NetworkError,
-  NotFoundError,
-  ServiceUnavailableError,
-  UnauthorizedError,
-  ValidationError,
-  type FieldErrors,
-} from './errors'
+import { NetworkError } from './errors'
+import { mapHttpError } from './error-mapping'
 import { notifyUnauthorized, readToken, readWorkspaceId } from './providers'
+import { appendSafeCustomHeaders } from './security'
 import type { RequestOptions, TokenProvider, WorkspaceProvider } from './types'
-
-/** Header that must never be sent from the frontend. */
-const INTERNAL_TOKEN_HEADER = 'x-internal-token'
 
 export interface ApiClientOptions {
   baseUrl: string
@@ -52,100 +42,6 @@ function buildUrl(
   }
   const query = search.toString()
   return query ? `${url}?${query}` : url
-}
-
-/** Drop any attempt to set the internal service-to-service token. */
-function sanitizeCustomHeaders(
-  headers: Record<string, string> | undefined,
-  target: Headers,
-): void {
-  if (!headers) return
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === INTERNAL_TOKEN_HEADER) {
-      if (ENV.isDev) {
-        console.warn(
-          '[api] Blocked attempt to set X-Internal-Token from the frontend.',
-        )
-      }
-      continue
-    }
-    target.set(key, value)
-  }
-}
-
-function extractRequestId(response: Response, body: unknown): string | undefined {
-  const fromHeader =
-    response.headers.get('X-Request-ID') ??
-    response.headers.get('X-Request-Id') ??
-    undefined
-  if (fromHeader) return fromHeader
-  if (body && typeof body === 'object' && 'request_id' in body) {
-    const value = (body as Record<string, unknown>).request_id
-    if (typeof value === 'string') return value
-  }
-  return undefined
-}
-
-function extractMessage(body: unknown, fallback: string): string {
-  if (typeof body === 'string' && body.trim()) return body
-  if (body && typeof body === 'object') {
-    const record = body as Record<string, unknown>
-    if (typeof record.detail === 'string') return record.detail
-    if (typeof record.message === 'string') return record.message
-  }
-  return fallback
-}
-
-function extractCode(body: unknown): string | undefined {
-  if (body && typeof body === 'object') {
-    const value = (body as Record<string, unknown>).code
-    if (typeof value === 'string') return value
-  }
-  return undefined
-}
-
-/** Best-effort parse of DRF field errors: `{ field: ["msg", …], … }`. */
-function extractFieldErrors(body: unknown): FieldErrors | undefined {
-  if (!body || typeof body !== 'object') return undefined
-  const result: FieldErrors = {}
-  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
-    if (key === 'detail' || key === 'code' || key === 'message') continue
-    if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
-      result[key] = value as string[]
-    } else if (typeof value === 'string') {
-      result[key] = [value]
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined
-}
-
-function mapHttpError(response: Response, body: unknown): ApiError {
-  const status = response.status
-  const requestId = extractRequestId(response, body)
-  const code = extractCode(body)
-  const message = extractMessage(body, response.statusText || `HTTP ${status}`)
-  const base = { code, details: body, requestId }
-
-  switch (status) {
-    case 400:
-    case 422:
-      return new ValidationError(message, {
-        ...base,
-        status,
-        fieldErrors: extractFieldErrors(body),
-      })
-    case 401:
-      return new UnauthorizedError(message, base)
-    case 403:
-      return new ForbiddenError(message, base)
-    case 404:
-      return new NotFoundError(message, base)
-    case 502:
-    case 503:
-      return new ServiceUnavailableError(message, { ...base, status })
-    default:
-      return new ApiError(message, { ...base, status })
-  }
 }
 
 async function parseBody(response: Response): Promise<unknown> {
@@ -195,7 +91,16 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     if (workspaceId) headers.set('X-Workspace-ID', workspaceId)
 
     // Custom headers are merged last; internal-secret headers are stripped.
-    sanitizeCustomHeaders(options.headers, headers)
+    appendSafeCustomHeaders(
+      options.headers,
+      headers,
+      ENV.isDev
+        ? (headerName) =>
+            console.warn(
+              `[api] Blocked custom ${headerName}; provider-owned headers cannot be overridden.`,
+            )
+        : undefined,
+    )
 
     const url = buildUrl(baseUrl, path, options.params)
 

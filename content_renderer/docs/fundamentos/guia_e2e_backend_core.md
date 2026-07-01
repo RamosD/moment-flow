@@ -1,8 +1,8 @@
 # Guia de Teste E2E — Content Renderer ↔ Backend Core (Django)
 
 Este guia descreve como validar o ciclo completo **job externo → render → callback
-→ Asset/Output/Report/MediaKit** entre o `content_renderer` (Node, porta 8002) e o
-`backend_core` (Django, porta 8000).
+→ Asset/Output/Report/MediaKit** entre o `content_renderer` (Node, porta 8202) e o
+`backend_core` (Django, porta 8100).
 
 > **Regra:** o renderer apenas gera activos e reporta o resultado técnico. O Django
 > governa o produto (entidades, estado, billing, Asset). Não se altera o
@@ -24,10 +24,10 @@ Este guia descreve como validar o ciclo completo **job externo → render → ca
 **Renderer (`content_renderer`):**
 
 ```text
-PORT=8002
+PORT=8202
 NODE_ENV=development
 INTERNAL_API_TOKEN=<token-partilhado>
-BACKEND_CORE_BASE_URL=http://localhost:8000
+BACKEND_CORE_BASE_URL=http://localhost:8100
 LOCAL_STORAGE_ROOT=<pasta-local>
 ```
 
@@ -35,9 +35,9 @@ LOCAL_STORAGE_ROOT=<pasta-local>
 
 ```text
 INTERNAL_API_TOKEN=<token-partilhado>          # igual ao renderer
-BACKEND_PUBLIC_BASE_URL=http://localhost:8000
-CONTENT_RENDERER_BASE_URL=http://localhost:8002
-REPORT_RENDERER_BASE_URL=http://localhost:8002 # report e media kit também no renderer único
+BACKEND_PUBLIC_BASE_URL=http://localhost:8100
+CONTENT_RENDERER_BASE_URL=http://localhost:8202
+REPORT_RENDERER_BASE_URL=http://localhost:8202 # report e media kit também no renderer único
 INTERNAL_CALLBACK_PATH=/api/v1/internal/jobs/callback/
 EXTERNAL_JOBS_ENABLED=true
 EXTERNAL_JOBS_DRY_RUN=false
@@ -45,7 +45,7 @@ EXTERNAL_JOBS_DRY_RUN=false
 
 > O Backend mapeia `report_generation`/`media_kit_generation` para o provider
 > `report_renderer`; como o renderer único serve os três tipos, aponta-se
-> `REPORT_RENDERER_BASE_URL` para `http://localhost:8002`.
+> `REPORT_RENDERER_BASE_URL` para `http://localhost:8202`.
 
 ---
 
@@ -77,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File scripts\run-e2e.ps1
 
 O `run-e2e.ps1`:
 
-1. arranca o renderer (`node dist/server.js`, :8002) e o Django (`runserver`, :8000)
+1. arranca o renderer (`node dist/server.js`, :8202) e o Django (`runserver`, :8100)
    com o mesmo token e as URLs acima;
 2. espera ambos ficarem `up` (`/health` e `/api/v1/schema/`);
 3. corre `scripts/e2e_backend_core.py` (venv do backend), que para report e media
@@ -151,7 +151,7 @@ renderer:
    estado do `ExternalJobReference` (o produto — Asset/Report — fica correcto). A
    recomendação do backlog (CR-203) é **callback em background leve** (responder 202
    primeiro, callback depois) — melhoria recomendada para produção.
-3. **Renderer único para os 3 tipos:** apontar `REPORT_RENDERER_BASE_URL` para :8002.
+3. **Renderer único para os 3 tipos:** apontar `REPORT_RENDERER_BASE_URL` para :8202.
 
 ---
 

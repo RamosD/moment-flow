@@ -851,8 +851,8 @@ Confirmar que o frontend pode migrar da projecção best-effort para a API real.
 ## Tarefas
 
 ```text id="y6gpiq"
-Subir Backend Core em localhost:8000.
-Subir frontend em localhost:5173.
+Subir Backend Core em localhost:8100.
+Subir frontend em localhost:5200.
 Confirmar endpoint /campaign-actions/.
 Criar action via API.
 Listar action via API.

@@ -219,20 +219,20 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
 
   return {
     nodeEnv,
-    port: parsePositiveInteger('PORT', source.PORT, 8002),
+    port: parsePositiveInteger('PORT', source.PORT, 8202),
     internalApiToken,
     allowInsecureEmptyToken,
     insecureTokenMode,
     rendererPublicBaseUrl: stringOrDefault(
       source.RENDERER_PUBLIC_BASE_URL,
-      'http://localhost:8002',
+      'http://localhost:8202',
     ),
-    backendCoreBaseUrl: stringOrDefault(source.BACKEND_CORE_BASE_URL, 'http://localhost:8000'),
+    backendCoreBaseUrl: stringOrDefault(source.BACKEND_CORE_BASE_URL, 'http://localhost:8100'),
     storageProvider: parseStorageProvider(source.STORAGE_PROVIDER),
     localStorageRoot: stringOrDefault(source.LOCAL_STORAGE_ROOT, './storage'),
     localStoragePublicBaseUrl: stringOrDefault(
       source.LOCAL_STORAGE_PUBLIC_BASE_URL,
-      'http://localhost:8002/files',
+      'http://localhost:8202/files',
     ),
     maxJobPayloadBytes: parsePositiveInteger(
       'MAX_JOB_PAYLOAD_BYTES',

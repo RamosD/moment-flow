@@ -3,7 +3,7 @@
 `create_app` builds and wires a fully configured application; `app` is the
 default instance used by Uvicorn:
 
-    uvicorn app.main:app --reload --port 8001
+    uvicorn app.main:app --reload --port 8201
 
 The factory keeps configuration explicit (settings are stored on
 `app.state.settings` and injected into request handlers from there) and makes

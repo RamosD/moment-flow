@@ -15,7 +15,7 @@ loop real:
 
 | Variável | Valor exigido |
 |---|---|
-| `INTELLIGENCE_ENGINE_BASE_URL` | URL do IE a correr (ex.: `http://127.0.0.1:8001`) |
+| `INTELLIGENCE_ENGINE_BASE_URL` | URL do IE a correr (ex.: `http://127.0.0.1:8201`) |
 | `INTELLIGENCE_ENGINE_INTERNAL_TOKEN` (ou `INTERNAL_API_TOKEN`) | **não vazio**; o **mesmo** valor configurado no IE |
 | `INTELLIGENCE_ENGINE_ENABLED` | `True` |
 | `INTELLIGENCE_ENGINE_DRY_RUN` | `False` |
@@ -25,12 +25,12 @@ Arranque do IE (terminal separado), com um token de **dev** descartável:
 ```powershell
 cd intelligence_engine
 $env:INTERNAL_API_TOKEN="<DEV_TOKEN>"; $env:APP_ENV="development"
-venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8201
 ```
 
 > Sugestão: antes do smoke, confirma a disponibilidade com o healthcheck agregado
 > (`GET /api/v1/system/health/dependencies/`, staff-only) ou directamente
-> `curl http://127.0.0.1:8001/health`.
+> `curl http://127.0.0.1:8201/health`.
 
 ---
 
@@ -42,7 +42,7 @@ nada na base de dados.**
 
 ```powershell
 cd backend_core
-$env:INTELLIGENCE_ENGINE_BASE_URL="http://127.0.0.1:8001"
+$env:INTELLIGENCE_ENGINE_BASE_URL="http://127.0.0.1:8201"
 $env:INTELLIGENCE_ENGINE_INTERNAL_TOKEN="<DEV_TOKEN>"
 $env:INTELLIGENCE_ENGINE_ENABLED="true"; $env:INTELLIGENCE_ENGINE_DRY_RUN="false"
 venv/Scripts/python.exe manage.py smoke_intelligence_engine
@@ -53,8 +53,8 @@ venv/Scripts/python.exe manage.py smoke_intelligence_engine --reference-date 202
 **Saída de sucesso** (exemplo; o token nunca aparece):
 
 ```text
-smoke_ie config base_url=http://127.0.0.1:8001 enabled=True dry_run=False token=configured timeout_s=10
-smoke_ie start request_id=<hex> base_url=http://127.0.0.1:8001
+smoke_ie config base_url=http://127.0.0.1:8201 enabled=True dry_run=False token=configured timeout_s=10
+smoke_ie start request_id=<hex> base_url=http://127.0.0.1:8201
 smoke_ie ok {"status": "completed", "engine": "intelligence_engine", "engine_version": "0.1.0",
              "request_id": "<hex>", "keys_present": ["analysis","scores","grade","moments",
              "recommendations","summary"], "grade": "A", "moments": 4, "recommendations": 4, "warnings": 0}
@@ -80,7 +80,7 @@ guardado por `RUN_REAL_IE` (sem essa variável, os 3 testes aparecem como
 ```powershell
 cd backend_core
 $env:RUN_REAL_IE="1"
-$env:REAL_IE_BASE_URL="http://127.0.0.1:8001"
+$env:REAL_IE_BASE_URL="http://127.0.0.1:8201"
 $env:REAL_IE_TOKEN="<DEV_TOKEN>"
 venv/Scripts/python.exe -m pytest apps/campaigns/tests/test_intelligence_real_loop.py -q
 ```

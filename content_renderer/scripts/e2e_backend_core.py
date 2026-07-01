@@ -5,8 +5,8 @@ the Django ORM (read from ``BACKEND_CORE_DIR``), creates the minimal product
 entities for each scenario, seeds a *committed* ``ExternalJobReference`` via the
 bridge in DRY-RUN (so the job exists without Django itself calling the renderer),
 then plays the *submitter* role: it POSTs the exact Django envelope to the running
-renderer (:8002). The renderer renders a real file and calls back to the running
-Django server (:8000), which creates the ``Asset`` and updates the entity.
+renderer (:8202). The renderer renders a real file and calls back to the running
+Django server (:8100), which creates the ``Asset`` and updates the entity.
 
 Why DRY-RUN to seed the job: it commits the job row before the callback arrives
 and avoids the synchronous-renderer race where Django's own submit would
@@ -14,15 +14,15 @@ overwrite the job status set by the callback. The render + callback + Asset
 creation are entirely REAL. (Documented fallback — see the E2E guide.)
 
 Prerequisites (started by the caller):
-  - renderer on http://localhost:8002 (same INTERNAL_API_TOKEN)
-  - Django runserver on http://localhost:8000 (same INTERNAL_API_TOKEN,
+  - renderer on http://localhost:8202 (same INTERNAL_API_TOKEN)
+  - Django runserver on http://localhost:8100 (same INTERNAL_API_TOKEN,
     EXTERNAL_JOBS_ENABLED=true, EXTERNAL_JOBS_DRY_RUN=false,
-    *_RENDERER_BASE_URL=http://localhost:8002)
+    *_RENDERER_BASE_URL=http://localhost:8202)
 
 Env:
   BACKEND_CORE_DIR   absolute path to backend_core (default: ../../backend_core)
   INTERNAL_API_TOKEN shared internal token
-  RENDERER_JOBS_URL  default http://localhost:8002/jobs/
+  RENDERER_JOBS_URL  default http://localhost:8202/jobs/
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ BACKEND_DIR = os.environ.get(
     "BACKEND_CORE_DIR", os.path.abspath(os.path.join(HERE, "..", "..", "backend_core"))
 )
 TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
-RENDERER_JOBS_URL = os.environ.get("RENDERER_JOBS_URL", "http://localhost:8002/jobs/")
+RENDERER_JOBS_URL = os.environ.get("RENDERER_JOBS_URL", "http://localhost:8202/jobs/")
 
 sys.path.insert(0, BACKEND_DIR)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")

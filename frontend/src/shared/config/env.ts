@@ -9,8 +9,8 @@
  * the Intelligence Engine or the Content Renderer, and no internal secrets.
  */
 
-/** Sensible default for local development against a Backend Core on :8000. */
-const DEV_FALLBACK_API_BASE_URL = 'http://localhost:8000/api/v1'
+/** Sensible default for local development against a Backend Core on :8100. */
+const DEV_FALLBACK_API_BASE_URL = 'http://localhost:8100/api/v1'
 
 class EnvConfigError extends Error {
   constructor(message: string) {

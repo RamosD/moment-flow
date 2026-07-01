@@ -478,8 +478,8 @@ Instruções:
   - subir PostgreSQL;
   - configurar backend_core para usar PostgreSQL;
   - aplicar migrações;
-  - subir backend_core em localhost:8000;
-  - subir content_renderer em localhost:8002;
+  - subir backend_core em localhost:8100;
+  - subir content_renderer em localhost:8202;
   - garantir INTERNAL_API_TOKEN igual nos dois;
   - correr readiness checks;
   - executar script E2E;

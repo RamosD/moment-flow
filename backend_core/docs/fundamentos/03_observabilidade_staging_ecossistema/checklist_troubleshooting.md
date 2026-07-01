@@ -26,7 +26,7 @@ Antes de qualquer diagnóstico, confirma o estado geral com o
 **healthcheck agregado** (precisa de JWT de utilizador `is_staff`):
 
 ```powershell
-curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/system/health/dependencies/
+curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8100/api/v1/system/health/dependencies/
 ```
 
 ---
@@ -60,7 +60,7 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 |---|---|
 | **Sintoma** | `POST /api/v1/campaigns/{id}/intelligence/` devolve **503** com `intelligence_unavailable`; ou `manage.py smoke_intelligence_engine` falha com "Intelligence Engine call failed". |
 | **Causa provável** | O processo do IE não está a correr, ou está numa porta/host diferente do configurado. |
-| **Como confirmar** | `curl http://127.0.0.1:8001/health` (sem token — endpoint público). Sem resposta/connection refused ⇒ confirmado. |
+| **Como confirmar** | `curl http://127.0.0.1:8201/health` (sem token — endpoint público). Sem resposta/connection refused ⇒ confirmado. |
 | **Acção recomendada** | Arrancar o IE (ver [`runbook_arranque_staging.md`](runbook_arranque_staging.md) §4.2). Confirmar `INTELLIGENCE_ENGINE_BASE_URL` no `backend_core` aponta para o host/porta correctos. |
 | **Logs/campos úteis** | `campaigns.intelligence`: `event=intelligence_call_failed` / `error_type=IntelligenceUnavailableError`, `request_id`, `workspace_id`. `integrations_bridge.intelligence`: `intelligence_call unavailable request_id=… workspace_id=…`. |
 | **Quando escalar** | O IE está confirmadamente a correr e a responder a `curl` directo mas o `backend_core` continua a reportar indisponível (sugere erro de rede/DNS/firewall entre processos, não de configuração). |
@@ -99,7 +99,7 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 |---|---|
 | **Sintoma** | Resposta **502** (`intelligence_upstream_error`) no Backend Core; no log aparece `status=500` (após esgotar `INTELLIGENCE_ENGINE_MAX_RETRIES`, já que 5xx é retryable). |
 | **Causa provável** | Erro interno do próprio IE (bug, dependência interna a falhar) — fora do controlo directo do Backend Core. |
-| **Como confirmar** | Repetir directamente contra o IE: `curl -X POST http://127.0.0.1:8001/intelligence/campaign -H "X-Internal-Token: <DEV_TOKEN>" -H "Content-Type: application/json" -d "<payload-de-teste>"` e observar o `5xx`. |
+| **Como confirmar** | Repetir directamente contra o IE: `curl -X POST http://127.0.0.1:8201/intelligence/campaign -H "X-Internal-Token: <DEV_TOKEN>" -H "Content-Type: application/json" -d "<payload-de-teste>"` e observar o `5xx`. |
 | **Acção recomendada** | Consultar a consola/logs do processo do IE directamente (fora do âmbito desta fase do Backend Core). Confirmar se é reproduzível ou intermitente. |
 | **Logs/campos úteis** | `intelligence_call http_error … status=500`, `intelligence_call retry … attempt=… of=…` (confirma que houve retries antes de desistir). |
 | **Quando escalar** | Reproduzível de forma consistente, ou afecta múltiplas campanhas diferentes — não é um caso isolado de dados. |
@@ -112,8 +112,8 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 |---|---|
 | **Sintoma** | `manage.py smoke_content_renderer` (ou `--health-only`) falha com `Renderer /health is 'unavailable'`; jobs ficam em `failed`/`timeout`. |
 | **Causa provável** | Processo do renderer não está a correr, ou porta/URL errada (ver também [Caso 9](#caso-9--url-configurada-errada) para a discrepância 8002/8003). |
-| **Como confirmar** | `curl http://localhost:8002/health` (público, sem token). |
-| **Acção recomendada** | Arrancar o renderer (runbook §4.3). Confirmar `CONTENT_RENDERER_BASE_URL`/`REPORT_RENDERER_BASE_URL` apontam para `:8002`. |
+| **Como confirmar** | `curl http://localhost:8202/health` (público, sem token). |
+| **Acção recomendada** | Arrancar o renderer (runbook §4.3). Confirmar `CONTENT_RENDERER_BASE_URL`/`REPORT_RENDERER_BASE_URL` apontam para `:8202`. |
 | **Logs/campos úteis** | `integrations_bridge`: `event=job_submission_failed … error_type=…`, `provider=content_renderer`, `job_id`. |
 | **Quando escalar** | O `curl` directo ao `/health` funciona mas o Backend Core continua a reportar indisponível (rede/DNS entre processos). |
 
@@ -163,9 +163,9 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 | Campo | Detalhe |
 |---|---|
 | **Sintoma** | `connection refused`/timeout imediato apesar do serviço alvo estar a correr; ou um serviço **errado** responde (ex.: outro processo na mesma porta). |
-| **Causa provável mais comum (G9)** | `REPORT_RENDERER_BASE_URL` tem default `http://localhost:8003`, mas o `content_renderer` serve **todos** os tipos de job (incluindo `report_generation`/`media_kit_generation`) na porta **8002**. |
-| **Como confirmar** | `curl http://localhost:8002/health` responde; `curl http://localhost:8003/health` falha (salvo segundo processo deliberado nessa porta). |
-| **Acção recomendada** | Definir `REPORT_RENDERER_BASE_URL=http://localhost:8002` no `.env` do Backend Core. Confirmar também `INTELLIGENCE_ENGINE_BASE_URL`/`CONTENT_RENDERER_BASE_URL` apontam ao host/porta reais. |
+| **Causa provável mais comum** | `INTELLIGENCE_ENGINE_BASE_URL`, `CONTENT_RENDERER_BASE_URL`, ou `REPORT_RENDERER_BASE_URL` apontam para portas antigas. Portas correctas: Django `:8100`, IE `:8201`, renderer `:8202`. |
+| **Como confirmar** | `curl http://localhost:8202/health` responde; `curl http://127.0.0.1:8201/health` responde; `curl http://127.0.0.1:8100/api/v1/schema/` responde. |
+| **Acção recomendada** | Confirmar que os `.env` usam as portas padronizadas (ver `docs/configuracao/portas_projeto.md`). Confirmar também `INTELLIGENCE_ENGINE_BASE_URL`/`CONTENT_RENDERER_BASE_URL`/`REPORT_RENDERER_BASE_URL` apontam ao host/porta reais. |
 | **Logs/campos úteis** | `event=job_submission_failed reason=…`/`intelligence_call unavailable … reason=no_base_url` quando a URL está vazia/`misconfigured`; o healthcheck agregado mostra `misconfigured` por dependência. |
 | **Quando escalar** | URLs confirmadas correctas e o erro persiste — ver [Caso 1](#caso-1--intelligence-engine-indisponível)/[Caso 5](#caso-5--content-renderer-indisponível). |
 
@@ -215,8 +215,8 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 | Campo | Detalhe |
 |---|---|
 | **Sintoma** | Erro no arranque tipo `address already in use` / `EADDRINUSE`; ou um serviço "antigo" continua a responder com comportamento desactualizado. |
-| **Causa provável** | Um processo anterior (terminal fechado sem `Ctrl+C`, ou IDE a manter o processo vivo) ainda detém a porta `8000`/`8001`/`8002`. |
-| **Como confirmar** | `Get-NetTCPConnection -LocalPort 8001 \| Select-Object OwningProcess` (ajustar a porta); confirmar o `PID` devolvido. |
+| **Causa provável** | Um processo anterior (terminal fechado sem `Ctrl+C`, ou IDE a manter o processo vivo) ainda detém a porta `8100`/`8201`/`8202`. |
+| **Como confirmar** | `Get-NetTCPConnection -LocalPort 8201 \| Select-Object OwningProcess` (ajustar a porta); confirmar o `PID` devolvido. |
 | **Acção recomendada** | `Stop-Process -Id <PID>` e reiniciar o serviço pretendido. |
 | **Logs/campos úteis** | N/A (é um erro de arranque do processo, não um log estruturado da aplicação). |
 | **Quando escalar** | A porta continua ocupada por um processo que não é claramente identificável como um dos três serviços (pode ser outro serviço do sistema a usar a mesma porta). |
@@ -266,11 +266,11 @@ curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/syst
 
 ```powershell
 # Healthchecks directos (públicos, sem token)
-curl http://127.0.0.1:8001/health
-curl http://localhost:8002/health
+curl http://127.0.0.1:8201/health
+curl http://localhost:8202/health
 
 # Healthcheck agregado (staff-only)
-curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8000/api/v1/system/health/dependencies/
+curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://127.0.0.1:8100/api/v1/system/health/dependencies/
 
 # Smoke tests (ver guias dedicados para mais detalhe)
 cd backend_core
@@ -281,7 +281,7 @@ cd backend_core
 .\venv\Scripts\python.exe manage.py shell -c "import logging; print(logging.getLogger('integrations_bridge').getEffectiveLevel())"
 
 # Confirmar processo a ocupar uma porta (Windows)
-Get-NetTCPConnection -LocalPort 8001 | Select-Object OwningProcess
+Get-NetTCPConnection -LocalPort 8201 | Select-Object OwningProcess
 
 # Estado do PostgreSQL do harness E2E
 docker inspect --format '{{.State.Health.Status}}' chartrex_e2e_postgres

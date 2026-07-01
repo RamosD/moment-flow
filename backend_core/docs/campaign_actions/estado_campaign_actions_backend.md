@@ -456,7 +456,7 @@ Os comandos foram executados com o Python do venv do Backend Core.
 
 - migration aplicada em bases SQLite de teste/in-memory;
 - schema OpenAPI gerado e validado;
-- HTTP real contra Django `manage.py runserver` em localhost:8000;
+- HTTP real contra Django `manage.py runserver 127.0.0.1:8100` em localhost:8100;
 - header do servidor confirmou WSGI/Django, não FastAPI/uvicorn;
 - `/api/v1/schema/`, `/api/v1/docs/` e `/admin/`: 200;
 - 30 verificações HTTP aprovadas: login, `/auth/me`, workspaces, CRUD,

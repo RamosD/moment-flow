@@ -110,7 +110,7 @@ para desenvolvimento):
 
 | Variável | Default | Notas |
 |---|---|---|
-| `INTELLIGENCE_ENGINE_BASE_URL` | `http://localhost:8001` | URL base do FastAPI Intelligence Engine. |
+| `INTELLIGENCE_ENGINE_BASE_URL` | `http://localhost:8201` | URL base do FastAPI Intelligence Engine. |
 | `INTELLIGENCE_ENGINE_TIMEOUT_SECONDS` | `10` | Timeout do cliente HTTP. |
 | `INTELLIGENCE_ENGINE_INTERNAL_TOKEN` | (vazio → reutiliza `INTERNAL_API_TOKEN`) | Token enviado em `X-Internal-Token`. Pode ser um segredo dedicado, ou deixar vazio para partilhar o mesmo segredo dos jobs externos. |
 | `INTELLIGENCE_ENGINE_ENABLED` | `True` | `False` → o cliente síncrono nunca é chamado (serviço devolve `IntelligenceDisabledError` → 503). |
@@ -237,11 +237,11 @@ para os logs e a resposta JSON reais):
 # Terminal 1 — Intelligence Engine real
 cd intelligence_engine
 INTERNAL_API_TOKEN=real-loop-token-123 APP_ENV=development `
-    venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+    venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8201
 
 # Terminal 2 — Backend Core, testes contra o engine real
 cd backend_core
-$env:RUN_REAL_IE=1; $env:REAL_IE_BASE_URL="http://127.0.0.1:8001"; $env:REAL_IE_TOKEN="real-loop-token-123"
+$env:RUN_REAL_IE=1; $env:REAL_IE_BASE_URL="http://127.0.0.1:8201"; $env:REAL_IE_TOKEN="real-loop-token-123"
 venv/Scripts/python.exe -m pytest apps/campaigns/tests/test_intelligence_real_loop.py -q
 ```
 
