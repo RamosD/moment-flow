@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Environment (never commit real secrets — see .env.example)
+.env
+.env.*
+!.env.example
+!.env.e2e.example
+
+# Local renderer storage (generated assets)
+storage/
+
+# E2E harness logs/artifacts
+e2e-logs/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

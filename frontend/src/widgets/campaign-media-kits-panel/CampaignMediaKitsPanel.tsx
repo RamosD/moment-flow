@@ -1,0 +1,74 @@
+import type { ReactNode } from 'react'
+
+import { useCampaignMediaKits } from '@/entities/media-kit'
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Section,
+  statusToBadgeVariant,
+} from '@/shared/ui'
+import listStyles from '@/shared/styles/output-list.module.css'
+
+interface CampaignMediaKitsPanelProps {
+  workspaceId: string | null
+  campaignId: string | undefined
+}
+
+/**
+ * Media kits for the campaign, from the Backend Core
+ * (`GET /media-kits/?campaign=…`). Read-only — no generation, no direct
+ * Renderer calls.
+ */
+export function CampaignMediaKitsPanel({
+  workspaceId,
+  campaignId,
+}: CampaignMediaKitsPanelProps) {
+  const { data, isPending, isError, error, refetch } = useCampaignMediaKits(
+    workspaceId,
+    campaignId,
+  )
+
+  let body: ReactNode
+  if (isPending) {
+    body = <LoadingState label="Loading media kits…" />
+  } else if (isError) {
+    body = <ErrorState error={error} onRetry={() => void refetch()} />
+  } else if (data.length === 0) {
+    body = (
+      <EmptyState
+        title="No media kits yet"
+        description="Media kits created for this campaign will appear here."
+      />
+    )
+  } else {
+    body = (
+      <ul className={listStyles.list}>
+        {data.map((kit) => {
+          const itemCount = kit.items?.length ?? 0
+          return (
+            <li key={kit.id} className={listStyles.item}>
+              <div className={listStyles.itemMain}>
+                <span className={listStyles.itemTitle}>{kit.title}</span>
+                <span className={listStyles.itemMeta}>
+                  {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                </span>
+              </div>
+              <Badge variant={statusToBadgeVariant(kit.status)}>
+                {kit.status ?? 'unknown'}
+              </Badge>
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
+
+  return (
+    <Card padding="lg">
+      <Section title="Media kits">{body}</Section>
+    </Card>
+  )
+}

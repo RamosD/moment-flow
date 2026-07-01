@@ -1,0 +1,9 @@
+/**
+ * Global stylesheet entry point. Import order matters:
+ * tokens (variables) → reset → global element styles.
+ *
+ * Imported once from src/main.tsx.
+ */
+@import './tokens.css';
+@import './reset.css';
+@import './global.css';

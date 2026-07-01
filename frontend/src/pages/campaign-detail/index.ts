@@ -1,0 +1,1 @@
+export { CampaignDetailPage } from './CampaignDetailPage'

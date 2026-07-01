@@ -1,0 +1,11 @@
+.gradeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.gradeLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

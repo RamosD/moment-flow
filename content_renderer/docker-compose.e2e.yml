@@ -1,0 +1,28 @@
+# E2E-only PostgreSQL for the Content Renderer ↔ Backend Core loop (R-HARD-002).
+#
+# Provides a reliable MULTI-PROCESS database so the renderer's callback (a
+# separate process) can see the ExternalJobReference committed by the harness —
+# something SQLite cannot do across processes (see the E2E guide caveats).
+#
+# Credentials below are EXPLICIT DEVELOPMENT VALUES, not secrets and NOT for
+# production. They are overridable via the environment (.env.e2e). The data
+# directory is a tmpfs, so the database is disposable and nothing is persisted.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chartrex_e2e_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-chartrex_e2e}
+      POSTGRES_USER: ${DB_USER:-chartrex_e2e}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chartrex_e2e_dev_only}
+    ports:
+      # Host 55432 (not 5432) to avoid clashing with a local PostgreSQL install.
+      - "${DB_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chartrex_e2e} -d ${DB_NAME:-chartrex_e2e}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    # Ephemeral storage: the E2E database is disposable; no real data is kept.
+    tmpfs:
+      - /var/lib/postgresql/data
