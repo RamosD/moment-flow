@@ -40,6 +40,36 @@ class TestContentPackRequest:
         assert request.workspace_id == workspace.id
         assert request.requested_by_id == owner.id
 
+    def test_create_populates_correlation_id_from_request_header(
+        self, client_for, owner, workspace, make_campaign, caplog
+    ):
+        """STG-PRE-005: X-Request-ID ends up on the request and its job, and is
+        actually logged at creation (not just computed and dropped)."""
+        import logging
+
+        from apps.integrations_bridge.models import ExternalJobReference
+
+        campaign = make_campaign(workspace)
+        pack = ContentPack.objects.get(pack_key="release_pack")
+        headers = {**ws_header(workspace), "HTTP_X_REQUEST_ID": "trace-cpr-1"}
+        with caplog.at_level(logging.INFO, logger="content"):
+            resp = client_for(owner).post(
+                REQUESTS_URL,
+                {"campaign": str(campaign.id), "content_pack": str(pack.id)},
+                format="json",
+                **headers,
+            )
+        assert resp.status_code == 201
+        assert resp.data["correlation_id"] == "trace-cpr-1"
+        request = ContentPackRequest.objects.get(id=resp.data["id"])
+        assert request.correlation_id == "trace-cpr-1"
+        assert "event=content_pack_request_created" in caplog.text
+        assert "correlation_id=trace-cpr-1" in caplog.text
+        job = ExternalJobReference.objects.get(
+            related_entity_type="content_pack_request", related_entity_id=str(request.id)
+        )
+        assert job.request_id == "trace-cpr-1"
+
     def test_rejects_campaign_from_other_workspace(
         self, client_for, owner, workspace, other_workspace, make_campaign
     ):

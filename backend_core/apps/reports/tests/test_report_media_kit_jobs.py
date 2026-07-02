@@ -127,6 +127,10 @@ class TestReportJob:
         assert "renderer down" in job.error_message
         report.refresh_from_db()
         assert report.metadata.get("external_job_id") == str(job.id)
+        # STG-PRE-007: a submission-time failure (renderer never reached, so no
+        # callback will ever arrive) must not leave the report stuck "queued".
+        assert report.status == Report.Status.FAILED
+        assert "renderer down" in report.metadata.get("error", "")
 
 
 # --------------------------------------------------------------------------- #
@@ -195,6 +199,37 @@ class TestMediaKitJob:
         assert ExternalJobReference.objects.filter(
             idempotency_key=f"media_kit_generation:{media_kit.id}"
         ).count() == 1
+
+    def test_media_kit_submission_failure_is_traceable(
+        self, settings, monkeypatch, owner, workspace, make_artist
+    ):
+        settings.EXTERNAL_JOBS_ENABLED = True
+        settings.EXTERNAL_JOBS_DRY_RUN = False
+        settings.REPORT_RENDERER_BASE_URL = "http://renderer:8003"
+
+        class DownClient:
+            def __init__(self, *a, **k):
+                pass
+
+            def post_json(self, *a, **k):
+                raise InternalServiceUnavailable("renderer down")
+
+        monkeypatch.setattr(bridge, "InternalServiceClient", DownClient)
+
+        media_kit = MediaKit.objects.create(
+            workspace=workspace, artist=make_artist(workspace), title="Kit",
+            created_by=owner,
+        )
+        submit_media_kit_generation_job(media_kit, requested_by=owner)
+        job = _job_for("media_kit", media_kit.id)
+        assert job.status == ExternalJobReference.Status.FAILED
+        media_kit.refresh_from_db()
+        # MediaKit has no FAILED status of its own (STG-PRE-007) — a
+        # submission-time failure (no callback will ever arrive) must still be
+        # traceable via metadata, same as a real callback failure.
+        assert media_kit.status == MediaKit.Status.DRAFT
+        assert media_kit.metadata.get("generation_status") == "failed"
+        assert "renderer down" in media_kit.metadata.get("error", "")
 
 
 # --------------------------------------------------------------------------- #

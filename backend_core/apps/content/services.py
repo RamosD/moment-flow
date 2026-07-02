@@ -44,7 +44,7 @@ def _pack_credit_cost(content_pack) -> Decimal:
 
 def create_content_pack_request(
     *, workspace, requested_by, campaign, content_pack, track=None, artist=None,
-    metadata=None,
+    metadata=None, correlation_id="",
 ) -> ContentPackRequest:
     """Validate inputs, enforce billing, create a request (``queued``) and submit
     a ``content_generation`` external job.
@@ -91,6 +91,12 @@ def create_content_pack_request(
             requested_by=requested_by,
             status=ContentPackRequest.Status.QUEUED,
             metadata=metadata or {},
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "event=content_pack_request_created content_pack_request_id=%s "
+            "workspace_id=%s correlation_id=%s",
+            request.id, workspace.id, correlation_id,
         )
 
         event, _ = record_usage_event(
@@ -133,11 +139,11 @@ def create_content_pack_request(
         )
 
     # --- Outside the transaction: open & submit the renderer job. --- #
-    _submit_content_generation_job(request, requested_by)
+    _submit_content_generation_job(request, requested_by, correlation_id)
     return request
 
 
-def _submit_content_generation_job(request, requested_by) -> None:
+def _submit_content_generation_job(request, requested_by, correlation_id="") -> None:
     """Create and submit the ``content_generation`` job for a request.
 
     Best-effort and non-fatal: ``create_and_submit_external_job`` already records
@@ -160,6 +166,7 @@ def _submit_content_generation_job(request, requested_by) -> None:
             payload=payload,
             idempotency_key=f"content_generation:{request.id}",
             metadata={"content_pack_request_id": str(request.id)},
+            request_id=correlation_id or None,
         )
     except Exception as exc:  # noqa: BLE001 — never lose the request over submission
         logger.warning(
@@ -172,6 +179,11 @@ def _submit_content_generation_job(request, requested_by) -> None:
         request.save(update_fields=["metadata", "updated_at"])
         return
 
+    # A synchronous submission failure (renderer unreachable) may already have
+    # updated this same row's status/metadata in the database (see
+    # ``integrations_bridge.services._propagate_submission_failure``) — refresh
+    # before merging so that write is never clobbered by this stale copy.
+    request.refresh_from_db()
     # Link request <-> job and audit the submission.
     request.metadata = {**(request.metadata or {}), "external_job_id": str(job.id)}
     request.save(update_fields=["metadata", "updated_at"])

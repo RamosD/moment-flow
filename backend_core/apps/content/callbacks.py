@@ -22,7 +22,8 @@ Expected ``result`` shape (completed / partially_completed)::
             "storage_provider": "s3", "bucket": "...", "storage_key": "...",
             "file_name": "...", "mime_type": "image/png",
             "file_size_bytes": 12345, "width": 1080, "height": 1080,
-            "duration_seconds": null, "checksum": "..."
+            "duration_seconds": null, "checksum": "...",
+            "public_url": "https://.../output.png"
           },
           "metadata": {}
         }
@@ -325,6 +326,7 @@ def _create_asset(request, asset_data):
         height=asset_data.get("height"),
         duration_seconds=asset_data.get("duration_seconds"),
         checksum=asset_data.get("checksum", ""),
+        public_url=asset_data.get("public_url", ""),
         created_by=request.requested_by,
         metadata=asset_data.get("metadata") or {},
     )

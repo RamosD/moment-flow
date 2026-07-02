@@ -117,3 +117,30 @@ def test_response_is_deterministic_over_http(
     second = client_with_token.post(PATH, json=GOOD_PAYLOAD, headers=headers).json()
 
     assert first == second
+
+
+def test_request_id_is_logged_at_app_level(
+    client_with_token: TestClient, internal_token: str, caplog
+) -> None:
+    """STG-PRE-005 / OBS-L01: the Backend Core's correlation id (received as
+    ``request_id`` in the request body) must appear in this service's own
+    logs — previously it was only echoed back in the response, never logged."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="intelligence_engine.intelligence"):
+        response = client_with_token.post(
+            PATH, json=GOOD_PAYLOAD, headers={"X-Internal-Token": internal_token}
+        )
+
+    assert response.status_code == 200
+    own_records = [r for r in caplog.records if r.name == "intelligence_engine.intelligence"]
+    messages = [r.message for r in own_records]
+    assert "intelligence.request_received" in messages
+    assert "intelligence.request_completed" in messages
+    # `extra={"request_id": ...}` lands as an attribute on the LogRecord, not
+    # in the plain message — caplog.text uses pytest's own formatter, which
+    # does not include `extra` (only the app's JsonFormatter does at runtime).
+    request_ids = {getattr(r, "request_id", None) for r in own_records}
+    assert request_ids == {"req-1"}  # GOOD_PAYLOAD["request_id"]
+    # Never logs the internal token.
+    assert internal_token not in caplog.text

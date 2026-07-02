@@ -8,10 +8,15 @@ existing content or reporting artefact without replacing that artefact.
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import BaseModel, CreatedUpdatedByModel, WorkspaceOwnedModel
+from apps.core.models import (
+    BaseModel,
+    CorrelationIdModel,
+    CreatedUpdatedByModel,
+    WorkspaceOwnedModel,
+)
 
 
-class CampaignAction(BaseModel, WorkspaceOwnedModel, CreatedUpdatedByModel):
+class CampaignAction(BaseModel, WorkspaceOwnedModel, CreatedUpdatedByModel, CorrelationIdModel):
     """A persistent, workspace-scoped action associated with a campaign."""
 
     class ActionType(models.TextChoices):

@@ -2,7 +2,12 @@
 
 from django.urls import path
 
-from .views import ExternalJobCallbackView, SystemDependencyHealthView
+from .views import (
+    ExternalJobCallbackView,
+    SystemDependencyHealthView,
+    SystemLivenessView,
+    SystemReadinessView,
+)
 
 app_name = "integrations_bridge"
 
@@ -19,5 +24,16 @@ urlpatterns = [
         "system/health/dependencies/",
         SystemDependencyHealthView.as_view(),
         name="system-health-dependencies",
+    ),
+    # Liveness/readiness (STG-PRE-006). Public, like IE's/CR's own /health.
+    path(
+        "system/health/live/",
+        SystemLivenessView.as_view(),
+        name="system-health-live",
+    ),
+    path(
+        "system/health/ready/",
+        SystemReadinessView.as_view(),
+        name="system-health-ready",
     ),
 ]

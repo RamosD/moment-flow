@@ -39,6 +39,19 @@ export const CAMPAIGN_ACTION_SOURCES = ['recommendation', 'manual'] as const
 export type CampaignActionSource = (typeof CAMPAIGN_ACTION_SOURCES)[number]
 
 /**
+ * The real status of whichever artifact this action points to (its own
+ * lifecycle, not the CampaignAction's). ``status`` is a raw backend status
+ * string (e.g. a Report's `"failed"`, or `"failed"` derived from a MediaKit's
+ * metadata since MediaKit has no dedicated failed status) — surfaced so a
+ * "queued"/"draft" artifact whose renderer job actually failed is
+ * diagnosable without a second request.
+ */
+export interface RelatedArtifactStatus {
+  type: 'report' | 'media_kit' | 'content_pack_request'
+  status: string
+}
+
+/**
  * Persistent CampaignAction representation returned by the Backend Core.
  *
  * Entities in this frontend mirror API field names, so the canonical model is
@@ -62,6 +75,7 @@ export interface CampaignAction {
   related_content_output: UUID | null
   related_report: UUID | null
   related_media_kit: UUID | null
+  related_artifact_status: RelatedArtifactStatus | null
   created_by: UUID | null
   completed_at: ISODateTimeString | null
   cancelled_at: ISODateTimeString | null

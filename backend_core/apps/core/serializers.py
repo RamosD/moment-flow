@@ -28,6 +28,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "height",
             "duration_seconds",
             "checksum",
+            "public_url",
             "created_by",
             "metadata",
             "created_at",

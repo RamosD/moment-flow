@@ -14,7 +14,8 @@ or under ``"asset"``::
         "title": "June Recap", "format": "pdf",
         "storage_provider": "s3", "bucket": "...", "storage_key": "...",
         "file_name": "report.pdf", "mime_type": "application/pdf",
-        "file_size_bytes": 23456, "checksum": "...", "metadata": {}
+        "file_size_bytes": 23456, "checksum": "...",
+        "public_url": "https://.../report.pdf", "metadata": {}
       },
       "metadata": {}
     }
@@ -105,6 +106,7 @@ def _create_asset(workspace, asset_type, asset_data, *, created_by=None):
         height=asset_data.get("height"),
         duration_seconds=asset_data.get("duration_seconds"),
         checksum=asset_data.get("checksum", ""),
+        public_url=asset_data.get("public_url", ""),
         created_by=created_by,
         metadata=meta,
     )

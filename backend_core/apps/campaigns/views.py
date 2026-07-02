@@ -123,6 +123,7 @@ class CampaignViewSet(WorkspaceScopedRBACViewSet):
                 workspace=request.workspace,
                 campaign=campaign,
                 requested_by=request.user,
+                request_id=getattr(request, "correlation_id", None),
             )
         except CampaignNotFoundError as exc:  # defensive (get_object already 404s)
             raise NotFound("Campaign not found in this workspace.") from exc

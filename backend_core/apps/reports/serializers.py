@@ -44,6 +44,7 @@ class ReportSerializer(_WorkspaceContextMixin, serializers.ModelSerializer):
             "requested_by",
             "storage_asset",
             "metadata",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
@@ -51,6 +52,7 @@ class ReportSerializer(_WorkspaceContextMixin, serializers.ModelSerializer):
             "id",
             "workspace",
             "requested_by",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
@@ -132,6 +134,7 @@ class MediaKitSerializer(_WorkspaceContextMixin, serializers.ModelSerializer):
             "created_by",
             "items",
             "metadata",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
@@ -139,6 +142,7 @@ class MediaKitSerializer(_WorkspaceContextMixin, serializers.ModelSerializer):
             "id",
             "workspace",
             "created_by",
+            "correlation_id",
             "created_at",
             "updated_at",
         )

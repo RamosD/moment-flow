@@ -92,6 +92,14 @@ class TestLoggingConfig:
             "integrations_bridge.client",
             "integrations_bridge.intelligence",
             "campaigns.intelligence",
+            # STG-PRE-005: creation events for CampaignAction/Report/MediaKit/
+            # ContentPackRequest. Without an explicit LOGGING entry these would
+            # silently never reach any handler at INFO (Python's last-resort
+            # handler only surfaces WARNING+) — this test guards against that
+            # regression (found and fixed during this same iteration).
+            "campaign_actions.views",
+            "reports.views",
+            "content.services",
         ],
     )
     def test_loggers_emit_info(self, name):

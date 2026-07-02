@@ -34,6 +34,32 @@ class TestAssetCreation:
         assert asset.created_by_id == user_a.id
         assert asset.asset_type == "logo"
 
+    def test_public_url_is_exposed_and_settable(self, client_a, workspace_a):
+        resp = client_a.post(
+            ASSETS_URL,
+            {
+                "asset_type": "cover",
+                "file_name": "cover.png",
+                "public_url": "https://cdn.example.test/cover.png",
+            },
+            format="json",
+            **_ws(workspace_a),
+        )
+        assert resp.status_code == 201
+        assert resp.data["public_url"] == "https://cdn.example.test/cover.png"
+        asset = Asset.objects.get(id=resp.data["id"])
+        assert asset.public_url == "https://cdn.example.test/cover.png"
+
+    def test_public_url_defaults_to_empty(self, client_a, workspace_a):
+        resp = client_a.post(
+            ASSETS_URL,
+            {"asset_type": "logo", "file_name": "logo.png"},
+            format="json",
+            **_ws(workspace_a),
+        )
+        assert resp.status_code == 201
+        assert resp.data["public_url"] == ""
+
     def test_anonymous_is_rejected(self, workspace_a):
         from rest_framework.test import APIClient
 

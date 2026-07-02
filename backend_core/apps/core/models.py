@@ -130,6 +130,26 @@ class CreatedUpdatedByModel(models.Model):
         abstract = True
 
 
+class CorrelationIdModel(models.Model):
+    """Abstract base adding an optional end-to-end ``correlation_id`` (STG-PRE-005).
+
+    Set from the HTTP request that created the row (see
+    ``apps.core.middleware.CorrelationIdMiddleware``) so the same id can be
+    traced across the Backend Core, the Intelligence Engine and the Content
+    Renderer via structured logs. It **complements** domain ids (action id,
+    report id, job id, campaign id) — it never replaces or substitutes them.
+    Blank when the row was created outside a request context (e.g. a
+    management command or a test that does not set it explicitly).
+    """
+
+    correlation_id = models.CharField(
+        _("correlation id"), max_length=64, blank=True, db_index=True
+    )
+
+    class Meta:
+        abstract = True
+
+
 class Asset(BaseModel, SoftDeleteModel, WorkspaceOwnedModel, CreatedUpdatedByModel):
     """Generic reference to a stored file owned by a workspace.
 
@@ -176,6 +196,10 @@ class Asset(BaseModel, SoftDeleteModel, WorkspaceOwnedModel, CreatedUpdatedByMod
     height = models.PositiveIntegerField(_("height"), null=True, blank=True)
     duration_seconds = models.FloatField(_("duration (s)"), null=True, blank=True)
     checksum = models.CharField(_("checksum"), max_length=128, blank=True)
+    # Canonical URL where the file can be fetched (public URL today; may become a
+    # signed URL once a private-bucket provider is chosen — see STG-PRE-003).
+    # Long max_length because signed URLs carry query-string signatures.
+    public_url = models.URLField(_("public URL"), max_length=2048, blank=True)
     metadata = models.JSONField(_("metadata"), default=dict, blank=True)
 
     class Meta:

@@ -62,6 +62,7 @@ def _asset_block(fmt="pdf", mime="application/pdf"):
         "storage_provider": "s3", "bucket": "bucket", "storage_key": f"files/out.{fmt}",
         "file_name": f"out.{fmt}", "mime_type": mime,
         "file_size_bytes": 23456, "checksum": "deadbeef",
+        "public_url": f"https://bucket.example.test/files/out.{fmt}",
     }
 
 
@@ -96,6 +97,7 @@ class TestReportCallback:
         assert Asset.objects.filter(
             workspace=workspace, asset_type=Asset.AssetType.REPORT_PDF
         ).count() == 1
+        assert report.storage_asset.public_url == "https://bucket.example.test/files/out.pdf"
         assert Notification.objects.filter(
             workspace=workspace,
             notification_type=Notification.NotificationType.REPORT_READY,
@@ -155,6 +157,7 @@ class TestMediaKitCallback:
         assert Asset.objects.filter(
             workspace=workspace, asset_type=Asset.AssetType.MEDIA_KIT_ASSET
         ).count() == 1
+        assert media_kit.storage_asset.public_url == "https://bucket.example.test/files/out.pdf"
         assert Notification.objects.filter(
             workspace=workspace,
             notification_type=Notification.NotificationType.MEDIA_KIT_READY,

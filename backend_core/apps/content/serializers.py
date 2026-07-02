@@ -140,6 +140,7 @@ class ContentPackRequestSerializer(_WorkspaceContextMixin, serializers.ModelSeri
             "error_message",
             "usage_event_id",
             "metadata",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
@@ -153,6 +154,7 @@ class ContentPackRequestSerializer(_WorkspaceContextMixin, serializers.ModelSeri
             "failed_at",
             "error_message",
             "usage_event_id",
+            "correlation_id",
             "created_at",
             "updated_at",
         )

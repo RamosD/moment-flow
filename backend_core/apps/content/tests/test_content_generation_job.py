@@ -153,6 +153,11 @@ class TestSubmissionFailureTraceable:
         # Request preserved and linked — failure is traceable.
         assert ContentPackRequest.objects.filter(id=request.id).exists()
         assert request.metadata.get("external_job_id") == str(job.id)
+        # STG-PRE-007: a submission-time failure (renderer never reached, so no
+        # callback will ever arrive) must not leave the request stuck "queued".
+        request.refresh_from_db()
+        assert request.status == ContentPackRequest.Status.FAILED
+        assert "renderer down" in request.error_message
 
     def test_unexpected_error_preserves_request(
         self, monkeypatch, workspace, owner, make_campaign

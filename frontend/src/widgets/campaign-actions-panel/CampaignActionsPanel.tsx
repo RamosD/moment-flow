@@ -8,6 +8,8 @@ import {
   campaignActionStatusLabel,
   campaignActionStatusVariant,
   campaignActionTypeLabel,
+  relatedArtifactStatusLabel,
+  relatedArtifactStatusVariant,
   useCampaignActions,
 } from '@/entities/campaign-action'
 import listStyles from '@/shared/styles/output-list.module.css'
@@ -121,6 +123,15 @@ function CampaignActionItem({
         <Badge variant={campaignActionStatusVariant(action.status)}>
           {campaignActionStatusLabel(action.status)}
         </Badge>
+        {action.related_artifact_status && (
+          <Badge
+            variant={relatedArtifactStatusVariant(
+              action.related_artifact_status.status,
+            )}
+          >
+            {relatedArtifactStatusLabel(action.related_artifact_status)}
+          </Badge>
+        )}
         <CampaignActionLifecycleControls
           action={action}
           workspaceId={workspaceId}

@@ -91,8 +91,36 @@ def _redact_sensitive_keys(value):
     return value
 
 
+def _related_artifact_status(action):
+    """Surface the status of whichever artifact this action points to.
+
+    The CampaignAction's own ``status`` is a separate, user-driven lifecycle
+    (STG-PRE-007: not altered here) — this only exposes the *artifact's*
+    generation outcome so a "queued"/"draft" artifact whose renderer job
+    actually failed is diagnosable from this API without a second request.
+    """
+    if action.related_report_id and action.related_report:
+        return {"type": "report", "status": action.related_report.status}
+    if action.related_media_kit_id and action.related_media_kit:
+        media_kit = action.related_media_kit
+        status = media_kit.status
+        if (media_kit.metadata or {}).get("generation_status") == "failed":
+            # MediaKit has no dedicated FAILED status — a failed generation is
+            # recorded on metadata instead (see reports.callbacks).
+            status = "failed"
+        return {"type": "media_kit", "status": status}
+    if action.related_content_pack_request_id and action.related_content_pack_request:
+        return {
+            "type": "content_pack_request",
+            "status": action.related_content_pack_request.status,
+        }
+    return None
+
+
 class CampaignActionSerializer(serializers.ModelSerializer):
     """Read/write representation with tenant and campaign integrity checks."""
+
+    related_artifact_status = serializers.SerializerMethodField()
 
     class Meta:
         model = CampaignAction
@@ -114,9 +142,11 @@ class CampaignActionSerializer(serializers.ModelSerializer):
             "related_content_output",
             "related_report",
             "related_media_kit",
+            "related_artifact_status",
             "created_by",
             "completed_at",
             "cancelled_at",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
@@ -126,9 +156,13 @@ class CampaignActionSerializer(serializers.ModelSerializer):
             "created_by",
             "completed_at",
             "cancelled_at",
+            "correlation_id",
             "created_at",
             "updated_at",
         )
+
+    def get_related_artifact_status(self, obj):
+        return _related_artifact_status(obj)
 
     @property
     def _active_workspace(self):

@@ -30,7 +30,13 @@ VITE_BACKEND_API_BASE_URL=http://localhost:8100/api/v1
 BACKEND_CORE_PORT=8100
 CORS_ALLOWED_ORIGINS=http://localhost:5200,http://127.0.0.1:5200
 BACKEND_PUBLIC_BASE_URL=http://localhost:8100
-INTELLIGENCE_ENGINE_BASE_URL=http://localhost:8201
+# 127.0.0.1, não "localhost": em Windows, "localhost" resolve para ::1 E
+# 127.0.0.1, e o bind por default do uvicorn (só IPv4) não responde em ::1 —
+# cada chamada gasta o timeout completo na tentativa IPv6 antes de recuar
+# para IPv4, duplicando a latência sempre que o motor está inacessível
+# (achado STG-PRE-006, confirmado no healthcheck agregado e nas chamadas
+# síncronas reais).
+INTELLIGENCE_ENGINE_BASE_URL=http://127.0.0.1:8201
 CONTENT_RENDERER_BASE_URL=http://localhost:8202
 REPORT_RENDERER_BASE_URL=http://localhost:8202
 

@@ -21,12 +21,12 @@ from django.utils.timezone import now
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ValidationError
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .callbacks import callback_dispatcher
-from .health import check_dependencies
+from .health import check_dependencies, liveness_report, readiness_report
 from .logging_utils import log_job_event
 from .models import ExternalJobReference
 from .permissions import INTERNAL_TOKEN_HEADER, IsInternalService
@@ -202,3 +202,52 @@ class SystemDependencyHealthView(APIView):
     )
     def get(self, request):
         return Response(check_dependencies())
+
+
+class SystemLivenessView(APIView):
+    """``GET /api/v1/system/health/live/`` — public liveness probe (STG-PRE-006).
+
+    Mirrors the Intelligence Engine's and Content Renderer's own ``/health``:
+    public, no dependency checks, just confirms the process can answer a
+    request. Never confuse this with readiness (below) — a process can be
+    alive while its database is unreachable.
+    """
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        responses={200: OpenApiTypes.OBJECT},
+        summary="Liveness probe (public, no dependency checks)",
+        description="Always 200 while the process can serve requests at all.",
+    )
+    def get(self, request):
+        return Response(liveness_report())
+
+
+class SystemReadinessView(APIView):
+    """``GET /api/v1/system/health/ready/`` — public readiness probe (STG-PRE-006).
+
+    Checks only the database (see ``readiness_report``) — deliberately public
+    and deliberately minimal, exposing just ``ok``/``unavailable`` and nothing
+    about the Intelligence Engine or the Content Renderer (that operational
+    detail stays behind the staff-only aggregated endpoint above). Returns
+    HTTP 503 when not ready, so load balancers/orchestrators can act on it
+    without authentication — matching the security posture of the
+    Intelligence Engine's and Content Renderer's own public ``/health``.
+    """
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        responses={200: OpenApiTypes.OBJECT, 503: OpenApiTypes.OBJECT},
+        summary="Readiness probe (public; database only)",
+        description=(
+            "200 when the database is reachable, 503 otherwise. Does not "
+            "reflect the Intelligence Engine or the Content Renderer — see "
+            "the staff-only aggregated endpoint for that."
+        ),
+    )
+    def get(self, request):
+        report = readiness_report()
+        status_code = 200 if report["status"] == "ok" else 503
+        return Response(report, status=status_code)

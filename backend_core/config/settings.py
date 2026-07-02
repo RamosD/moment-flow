@@ -76,6 +76,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # WhiteNoise must come right after SecurityMiddleware.
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Correlation-id (STG-PRE-005): attach request.correlation_id as early as
+    # possible so every later middleware/view can rely on it being present.
+    "apps.core.middleware.CorrelationIdMiddleware",
     # CORS must come before CommonMiddleware (and as high as possible).
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -283,8 +286,16 @@ BACKEND_PUBLIC_BASE_URL = config(
     "BACKEND_PUBLIC_BASE_URL", default="http://localhost:8100"
 )
 
+# Default is 127.0.0.1, not "localhost" (STG-PRE-006): on Windows dev
+# machines, "localhost" resolves to both ::1 and 127.0.0.1, and uvicorn's own
+# default bind (127.0.0.1-only, IPv4) does not answer on ::1 — every call
+# then burns the full request timeout on the IPv6 attempt before falling
+# back to IPv4, silently doubling latency for both the aggregated healthcheck
+# and real synchronous intelligence calls whenever the engine is unreachable.
+# 127.0.0.1 sidesteps the ambiguity entirely; override via env if the engine
+# is genuinely reachable only via a hostname (e.g. a real staging host).
 INTELLIGENCE_ENGINE_BASE_URL = config(
-    "INTELLIGENCE_ENGINE_BASE_URL", default="http://localhost:8201"
+    "INTELLIGENCE_ENGINE_BASE_URL", default="http://127.0.0.1:8201"
 )
 # The contract's synchronous round-trip is sub-millisecond on the engine side, so
 # wall time is dominated by network/serialization. 10s is an ample margin for an
@@ -299,8 +310,13 @@ INTELLIGENCE_ENGINE_TIMEOUT_SECONDS = config(
 # ``INTELLIGENCE_ENGINE_INTERNAL_TOKEN`` explicitly only if a per-service token is
 # ever required. NOTE: this value is a secret — never log it, never expose it in
 # the OpenAPI schema or in execution reports.
-INTELLIGENCE_ENGINE_INTERNAL_TOKEN = config(
-    "INTELLIGENCE_ENGINE_INTERNAL_TOKEN", default=INTERNAL_API_TOKEN
+# ``or INTERNAL_API_TOKEN`` (rather than relying only on ``default=``) is
+# deliberate: python-decouple returns a literal empty string — not the
+# default — when the key is PRESENT in .env with nothing after ``=``. Without
+# this, a stray ``INTELLIGENCE_ENGINE_INTERNAL_TOKEN=`` line would silently
+# resolve to an empty token instead of reusing the shared one (STG-PRE-004).
+INTELLIGENCE_ENGINE_INTERNAL_TOKEN = (
+    config("INTELLIGENCE_ENGINE_INTERNAL_TOKEN", default="") or INTERNAL_API_TOKEN
 )
 # Master switches for the SYNCHRONOUS Intelligence Engine path. These are
 # intentionally independent from the asynchronous ``EXTERNAL_JOBS_*`` switches
@@ -428,6 +444,26 @@ LOGGING = {
         # Campaign intelligence service: request_id / workspace_id / campaign_id /
         # status / duration_ms / error_type.
         "campaigns.intelligence": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
+        # Creation events for CampaignAction / Report / MediaKit /
+        # ContentPackRequest (STG-PRE-005): action_id/report_id/media_kit_id/
+        # content_pack_request_id + workspace_id + correlation_id. The children
+        # ``campaign_actions.views``, ``reports.views``, ``content.services``
+        # inherit level and handler via propagation.
+        "campaign_actions": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
+        "reports": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
+        "content": {
             "handlers": ["console"],
             "level": LOG_LEVEL,
             "propagate": True,

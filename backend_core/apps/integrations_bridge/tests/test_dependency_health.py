@@ -133,9 +133,16 @@ class TestAggregator:
         for entry in deps.values():
             assert "duration_ms" in entry
 
-    def test_intelligence_engine_unavailable_is_degraded_overall(self):
+    def test_intelligence_engine_unavailable_is_degraded_overall(self, settings):
+        # Match against the actually configured URL rather than a hardcoded
+        # port literal — a prior version of this test hardcoded "8001", which
+        # never matched the real default (INTELLIGENCE_ENGINE_BASE_URL uses
+        # port 8201), so the prober's "down" branch never triggered and the
+        # test silently exercised the all-ok path instead.
+        ie_url = settings.INTELLIGENCE_ENGINE_BASE_URL
+
         def prober(url, timeout):
-            if "8001" in url:
+            if url == ie_url:
                 return (UNAVAILABLE, 1, "connection_error")
             return (OK, 5, "")
 
@@ -145,9 +152,11 @@ class TestAggregator:
         # One dependency down, others up → degraded (not unavailable, not 500).
         assert report["status"] == "degraded"
 
-    def test_content_renderer_unavailable_is_degraded_overall(self):
+    def test_content_renderer_unavailable_is_degraded_overall(self, settings):
+        cr_url = settings.CONTENT_RENDERER_BASE_URL
+
         def prober(url, timeout):
-            if "8002" in url:
+            if url == cr_url:
                 return (UNAVAILABLE, 1, "connection_error")
             return (OK, 5, "")
 
@@ -155,9 +164,11 @@ class TestAggregator:
         assert report["dependencies"]["content_renderer"]["status"] == UNAVAILABLE
         assert report["status"] == "degraded"
 
-    def test_timeout_is_unavailable_for_dependency(self):
+    def test_timeout_is_unavailable_for_dependency(self, settings):
+        cr_url = settings.CONTENT_RENDERER_BASE_URL
+
         def prober(url, timeout):
-            if "8002" in url:
+            if url == cr_url:
                 return (UNAVAILABLE, int(timeout * 1000), "timeout")
             return (OK, 5, "")
 
@@ -263,3 +274,48 @@ class TestEndpoint:
         deps = resp.data["dependencies"]
         assert deps["intelligence_engine"]["status"] == UNKNOWN
         assert resp.data["status"] in ("degraded", "unavailable")
+
+
+# --------------------------------------------------------------------------- #
+# Liveness / readiness (STG-PRE-006)
+# --------------------------------------------------------------------------- #
+LIVE_URL = "/api/v1/system/health/live/"
+READY_URL = "/api/v1/system/health/ready/"
+
+
+class TestLiveness:
+    def test_public_and_always_ok(self):
+        # No authentication at all — mirrors IE's/CR's own public /health.
+        resp = APIClient().get(LIVE_URL)
+        assert resp.status_code == 200
+        assert resp.data["status"] == "ok"
+
+    def test_never_touches_the_database(self, monkeypatch):
+        def boom(*a, **k):
+            raise AssertionError("liveness must never query the database")
+
+        monkeypatch.setattr(health, "_check_database", boom)
+        resp = APIClient().get(LIVE_URL)
+        assert resp.status_code == 200
+
+
+class TestReadiness:
+    def test_public_and_ok_when_db_reachable(self):
+        # Real DB call (django_db fixture) — no mocking needed for the happy path.
+        resp = APIClient().get(READY_URL)
+        assert resp.status_code == 200
+        assert resp.data["status"] == "ok"
+
+    def test_503_when_db_unreachable(self, monkeypatch):
+        monkeypatch.setattr(
+            health, "_check_database", lambda alias="default": (UNAVAILABLE, 1, "connection_error")
+        )
+        resp = APIClient().get(READY_URL)
+        assert resp.status_code == 503
+        assert resp.data["status"] == "unavailable"
+
+    def test_does_not_expose_intelligence_engine_or_renderer_status(self):
+        resp = APIClient().get(READY_URL)
+        assert "dependencies" not in resp.data
+        assert "intelligence_engine" not in str(resp.data)
+        assert "content_renderer" not in str(resp.data)

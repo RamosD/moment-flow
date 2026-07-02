@@ -139,6 +139,7 @@ class ContentPackRequestViewSet(WorkspaceScopedRBACViewSet):
         serializer.instance = create_content_pack_request(
             workspace=self.request.workspace,
             requested_by=self.request.user,
+            correlation_id=getattr(self.request, "correlation_id", ""),
             **serializer.validated_data,
         )
 

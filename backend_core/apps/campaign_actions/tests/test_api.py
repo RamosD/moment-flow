@@ -9,6 +9,7 @@ from apps.campaign_actions.models import CampaignAction
 from apps.campaigns.models import Campaign
 from apps.catalogue.models import Artist
 from apps.rbac.models import Role
+from apps.reports.models import MediaKit, Report
 from apps.workspaces.models import Workspace, WorkspaceMember
 
 User = get_user_model()
@@ -127,6 +128,51 @@ class TestCampaignActionCrud:
         assert action.priority == CampaignAction.Priority.HIGH
         assert action.metadata == {"updated": True}
 
+    def test_create_populates_correlation_id_from_request_header(
+        self, client_for_owner, workspace_header, campaign, caplog
+    ):
+        """STG-PRE-005: the id sent as X-Request-ID ends up on the created
+        CampaignAction, is returned in the response unmodified, and is
+        actually emitted in the creation log line (not just computed and
+        silently dropped — see the LOGGING config fix in this same iteration)."""
+        import logging
+
+        headers = {**workspace_header, "HTTP_X_REQUEST_ID": "trace-abc-123"}
+        with caplog.at_level(logging.INFO, logger="campaign_actions"):
+            create = client_for_owner.post(
+                BASE_URL,
+                {
+                    "campaign": str(campaign.id),
+                    "title": "Traced action",
+                    "action_type": CampaignAction.ActionType.MANUAL_TASK,
+                },
+                format="json",
+                **headers,
+            )
+        assert create.status_code == 201, create.data
+        assert create.data["correlation_id"] == "trace-abc-123"
+        action = CampaignAction.objects.get(id=create.data["id"])
+        assert action.correlation_id == "trace-abc-123"
+        assert "event=campaign_action_created" in caplog.text
+        assert f"action_id={action.id}" in caplog.text
+        assert "correlation_id=trace-abc-123" in caplog.text
+
+    def test_create_without_header_still_gets_a_correlation_id(
+        self, client_for_owner, workspace_header, campaign
+    ):
+        create = client_for_owner.post(
+            BASE_URL,
+            {
+                "campaign": str(campaign.id),
+                "title": "Untraced action",
+                "action_type": CampaignAction.ActionType.MANUAL_TASK,
+            },
+            format="json",
+            **workspace_header,
+        )
+        assert create.status_code == 201, create.data
+        assert create.data["correlation_id"]  # non-empty, middleware-generated
+
     def test_detail_from_other_workspace_is_404(
         self, client_for_owner, workspace_header
     ):
@@ -155,6 +201,64 @@ class TestCampaignActionCrud:
             == 405
         )
         assert client_for_owner.delete(url, **workspace_header).status_code == 405
+
+
+@pytest.mark.django_db
+class TestRelatedArtifactStatus:
+    """STG-PRE-007: surface the linked artifact's real status, not just its id."""
+
+    def test_no_related_artifact_is_null(
+        self, client_for_owner, workspace_header, workspace, campaign
+    ):
+        action = create_action(workspace, campaign)
+        response = client_for_owner.get(
+            f"{BASE_URL}{action.id}/", **workspace_header
+        )
+        assert response.data["related_artifact_status"] is None
+
+    def test_report_status_is_surfaced(
+        self, client_for_owner, workspace_header, workspace, campaign, owner
+    ):
+        report = Report.objects.create(
+            workspace=workspace, report_type=Report.ReportType.WEEKLY_REPORT,
+            title="R", requested_by=owner, status=Report.Status.FAILED,
+        )
+        action = create_action(
+            workspace, campaign,
+            action_type=CampaignAction.ActionType.REPORT_REQUEST,
+            related_report=report,
+        )
+        response = client_for_owner.get(
+            f"{BASE_URL}{action.id}/", **workspace_header
+        )
+        assert response.data["related_artifact_status"] == {
+            "type": "report", "status": "failed",
+        }
+
+    def test_media_kit_failure_in_metadata_is_surfaced_as_failed(
+        self, client_for_owner, workspace_header, workspace, campaign, owner
+    ):
+        # MediaKit has no dedicated FAILED status — a failed generation only
+        # shows up in metadata (reports.callbacks). The API must still surface
+        # it as "failed" so a "draft" media kit isn't mistaken for pending.
+        media_kit = MediaKit.objects.create(
+            workspace=workspace, artist=campaign.artist, title="Kit",
+            created_by=owner,
+            metadata={"generation_status": "failed", "error": "renderer down"},
+        )
+        action = create_action(
+            workspace, campaign,
+            action_type=CampaignAction.ActionType.MEDIA_KIT_REQUEST,
+            related_media_kit=media_kit,
+        )
+        response = client_for_owner.get(
+            f"{BASE_URL}{action.id}/", **workspace_header
+        )
+        assert response.data["related_artifact_status"] == {
+            "type": "media_kit", "status": "failed",
+        }
+        media_kit.refresh_from_db()
+        assert media_kit.status == MediaKit.Status.DRAFT
 
 
 @pytest.mark.django_db

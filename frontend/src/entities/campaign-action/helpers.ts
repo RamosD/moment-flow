@@ -5,6 +5,7 @@ import type {
   CampaignActionSource,
   CampaignActionStatus,
   CampaignActionType,
+  RelatedArtifactStatus,
 } from './model'
 
 const STATUS_LABEL: Record<CampaignActionStatus, string> = {
@@ -70,4 +71,33 @@ const SOURCE_LABEL: Record<CampaignActionSource, string> = {
 
 export function campaignActionSourceLabel(source: CampaignActionSource): string {
   return SOURCE_LABEL[source]
+}
+
+const ARTIFACT_TYPE_LABEL: Record<RelatedArtifactStatus['type'], string> = {
+  report: 'Report',
+  media_kit: 'Media kit',
+  content_pack_request: 'Content pack',
+}
+
+/** The artifact's *own* status (e.g. "Report: failed"), not the action's. */
+export function relatedArtifactStatusLabel(artifact: RelatedArtifactStatus): string {
+  return `${ARTIFACT_TYPE_LABEL[artifact.type]}: ${artifact.status.replace(/_/g, ' ')}`
+}
+
+const ARTIFACT_STATUS_VARIANT: Record<string, BadgeVariant> = {
+  completed: 'success',
+  generated: 'success',
+  published: 'success',
+  partially_completed: 'warning',
+  processing: 'warning',
+  queued: 'neutral',
+  draft: 'neutral',
+  archived: 'neutral',
+  failed: 'danger',
+  cancelled: 'danger',
+  expired: 'danger',
+}
+
+export function relatedArtifactStatusVariant(status: string): BadgeVariant {
+  return ARTIFACT_STATUS_VARIANT[status] ?? 'neutral'
 }

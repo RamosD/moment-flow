@@ -13,10 +13,10 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import BaseModel, WorkspaceOwnedModel
+from apps.core.models import BaseModel, CorrelationIdModel, WorkspaceOwnedModel
 
 
-class Report(BaseModel, WorkspaceOwnedModel):
+class Report(BaseModel, WorkspaceOwnedModel, CorrelationIdModel):
     """A request for / record of a generated report."""
 
     class ReportType(models.TextChoices):
@@ -130,7 +130,7 @@ class ReportSection(BaseModel, WorkspaceOwnedModel):
         return f"{self.report_id} / {self.section_key}"
 
 
-class MediaKit(BaseModel, WorkspaceOwnedModel):
+class MediaKit(BaseModel, WorkspaceOwnedModel, CorrelationIdModel):
     """A media kit for an artist (optionally scoped to a campaign/track)."""
 
     class Status(models.TextChoices):

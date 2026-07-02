@@ -1,5 +1,7 @@
 """Public, workspace-scoped API for persistent campaign actions."""
 
+import logging
+
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -12,6 +14,8 @@ from .filters import CampaignActionFilter
 from .models import CampaignAction
 from .serializers import CampaignActionSerializer, DismissCampaignActionSerializer
 from .services import CampaignActionTransitionError, transition_campaign_action
+
+logger = logging.getLogger("campaign_actions.views")
 
 _WORKSPACE_HEADER_PARAM = OpenApiParameter(
     name=WORKSPACE_ID_HEADER,
@@ -53,11 +57,27 @@ class CampaignActionViewSet(WorkspaceScopedRBACViewSet):
     http_method_names = ["get", "post", "patch", "head", "options"]
     required_permissions = _CAMPAIGN_ACTION_PERMS
 
+    def get_queryset(self):
+        # select_related the possible artifacts so exposing their status on the
+        # serializer (``related_artifact_status``) never costs an extra query
+        # per row.
+        return super().get_queryset().select_related(
+            "related_report", "related_media_kit", "related_content_pack_request"
+        )
+
     def perform_create(self, serializer):
-        serializer.save(
+        correlation_id = getattr(self.request, "correlation_id", "")
+        instance = serializer.save(
             workspace=self.request.workspace,
             created_by=self.request.user,
             updated_by=self.request.user,
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "event=campaign_action_created action_id=%s action_type=%s "
+            "workspace_id=%s campaign_id=%s correlation_id=%s",
+            instance.id, instance.action_type,
+            instance.workspace_id, instance.campaign_id, correlation_id,
         )
 
     def perform_update(self, serializer):

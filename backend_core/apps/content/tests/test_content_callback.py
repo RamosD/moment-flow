@@ -86,6 +86,7 @@ def _output(output_type="post", template_key="system_post", status="completed",
             "width": 1080,
             "height": 1080,
             "checksum": "deadbeef",
+            "public_url": f"https://bucket.example.test/outputs/{output_type}.png",
         }
     return data
 
@@ -122,6 +123,10 @@ class TestCompleted:
         assert Asset.objects.filter(
             workspace=workspace, asset_type=Asset.AssetType.GENERATED_OUTPUT
         ).count() == 2
+        assert all(
+            o.storage_asset.public_url == f"https://bucket.example.test/outputs/{o.output_type}.png"
+            for o in request.outputs.all()
+        )
         assert Notification.objects.filter(
             workspace=workspace,
             notification_type=Notification.NotificationType.CONTENT_READY,

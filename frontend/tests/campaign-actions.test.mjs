@@ -16,6 +16,8 @@ import { resolveErrorPreset } from '../src/shared/ui/states/error-presets.ts'
 import {
   campaignActionStatusLabel,
   campaignActionTypeLabel,
+  relatedArtifactStatusLabel,
+  relatedArtifactStatusVariant,
 } from '../src/entities/campaign-action/helpers.ts'
 import {
   availablePanelTransitions,
@@ -97,6 +99,30 @@ test('status and action type labels use the persistent enums', () => {
   assert.equal(campaignActionStatusLabel('dismissed'), 'Dismissed')
   assert.equal(campaignActionTypeLabel('mark_reviewed'), 'Mark reviewed')
   assert.equal(campaignActionTypeLabel('media_kit_request'), 'Media kit')
+})
+
+test('related artifact status surfaces the linked entity, not the action, as failed', () => {
+  // STG-PRE-007: MediaKit has no dedicated FAILED status of its own, so the
+  // API derives "failed" from metadata — the frontend label/variant must
+  // treat it exactly like a Report's real "failed" status.
+  assert.equal(
+    relatedArtifactStatusLabel({ type: 'report', status: 'failed' }),
+    'Report: failed',
+  )
+  assert.equal(
+    relatedArtifactStatusLabel({ type: 'media_kit', status: 'failed' }),
+    'Media kit: failed',
+  )
+  assert.equal(
+    relatedArtifactStatusLabel({
+      type: 'content_pack_request',
+      status: 'partially_completed',
+    }),
+    'Content pack: partially completed',
+  )
+  assert.equal(relatedArtifactStatusVariant('failed'), 'danger')
+  assert.equal(relatedArtifactStatusVariant('completed'), 'success')
+  assert.equal(relatedArtifactStatusVariant('queued'), 'neutral')
 })
 
 test('priority normalisation covers enum-like, numeric and fallback values', () => {

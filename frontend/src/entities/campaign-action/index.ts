@@ -19,6 +19,8 @@ export {
   campaignActionTypeLabel,
   campaignActionPriorityLabel,
   campaignActionSourceLabel,
+  relatedArtifactStatusLabel,
+  relatedArtifactStatusVariant,
 } from './helpers'
 
 export { campaignActionKeys } from './query-keys'

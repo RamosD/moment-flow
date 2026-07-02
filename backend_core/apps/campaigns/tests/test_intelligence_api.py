@@ -67,10 +67,11 @@ class TestSuccess:
         campaign = _make_campaign(workspace, artist)
         captured = {}
 
-        def fake_service(*, workspace, campaign, requested_by):
+        def fake_service(*, workspace, campaign, requested_by, request_id=None):
             captured["workspace"] = workspace
             captured["campaign"] = campaign
             captured["requested_by"] = requested_by
+            captured["request_id"] = request_id
             return _rich_outcome(campaign)
 
         monkeypatch.setattr(
@@ -78,9 +79,13 @@ class TestSuccess:
         )
 
         client = client_for(owner)
-        resp = client.post(_url(campaign.id), **ws_header(workspace))
+        resp = client.post(
+            _url(campaign.id), HTTP_X_REQUEST_ID="trace-xyz-1", **ws_header(workspace)
+        )
 
         assert resp.status_code == 200
+        # STG-PRE-005: the view forwards request.correlation_id as request_id.
+        assert captured["request_id"] == "trace-xyz-1"
         body = resp.data
         assert body["source"] == "engine"
         assert body["generated_at"]

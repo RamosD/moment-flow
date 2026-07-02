@@ -100,6 +100,31 @@ class TestCreate:
         assert FakeClient.last["request_id"] == job.request_id
         assert FakeClient.last["workspace_id"] == workspace.id
 
+    def test_explicit_request_id_is_reused_not_generated(self, settings, workspace, owner):
+        """STG-PRE-005: an explicit request_id (the caller's correlation id)
+        becomes the job's own request_id instead of a freshly generated one."""
+        settings.EXTERNAL_JOBS_ENABLED = False
+        job, _created = _create(workspace, owner, request_id="corr-abc123")
+        assert job.request_id == "corr-abc123"
+
+    def test_request_id_still_generated_when_omitted(self, settings, workspace, owner):
+        """Backward compatible: callers that don't pass request_id (retries,
+        management commands) keep getting a freshly generated one."""
+        settings.EXTERNAL_JOBS_ENABLED = False
+        job, _created = _create(workspace, owner)
+        assert job.request_id  # non-empty
+        job2, _created2 = _create(workspace, owner, entity_id="cpr-2")
+        assert job2.request_id != job.request_id
+
+    def test_explicit_request_id_reaches_the_external_client(
+        self, enabled_real, workspace, owner, monkeypatch
+    ):
+        patch_client(monkeypatch, FakeClient)
+        job, _created = _create(workspace, owner, request_id="corr-xyz789")
+        assert job.request_id == "corr-xyz789"
+        assert FakeClient.last["request_id"] == "corr-xyz789"
+        assert job.request_payload["request_id"] == "corr-xyz789"
+
     def test_timeout_marks_timeout_status(self, enabled_real, workspace, owner, monkeypatch):
         class TimeoutClient(FakeClient):
             def post_json(self, *a, **k):

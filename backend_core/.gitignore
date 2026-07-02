@@ -1,5 +1,7 @@
-# Secrets / environment
+# Secrets / environment (keep .env.example tracked)
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/

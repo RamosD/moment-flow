@@ -36,6 +36,35 @@ class TestMediaKitCreation:
         assert kit.created_by_id == owner.id
         assert kit.status == MediaKit.Status.DRAFT
 
+    def test_create_populates_correlation_id_from_request_header(
+        self, client_for, owner, workspace, make_artist, caplog
+    ):
+        """STG-PRE-005: X-Request-ID ends up on the MediaKit and its job, and
+        is actually logged at creation (not just computed and dropped)."""
+        import logging
+
+        from apps.integrations_bridge.models import ExternalJobReference
+
+        artist = make_artist(workspace)
+        headers = {**ws_header(workspace), "HTTP_X_REQUEST_ID": "trace-mk-1"}
+        with caplog.at_level(logging.INFO, logger="reports"):
+            resp = client_for(owner).post(
+                KITS_URL,
+                {"artist": str(artist.id), "title": "Traced Kit"},
+                format="json",
+                **headers,
+            )
+        assert resp.status_code == 201
+        assert resp.data["correlation_id"] == "trace-mk-1"
+        kit = MediaKit.objects.get(id=resp.data["id"])
+        assert kit.correlation_id == "trace-mk-1"
+        assert "event=media_kit_created" in caplog.text
+        assert "correlation_id=trace-mk-1" in caplog.text
+        job = ExternalJobReference.objects.get(
+            related_entity_type="media_kit", related_entity_id=str(kit.id)
+        )
+        assert job.request_id == "trace-mk-1"
+
     def test_create_records_usage_event(self, client_for, owner, workspace, make_artist):
         artist = make_artist(workspace)
         client_for(owner).post(

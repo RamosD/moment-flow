@@ -150,6 +150,34 @@ def _check_database(alias="default"):
         return UNAVAILABLE, _ms(start), "connection_error"
 
 
+def liveness_report() -> dict:
+    """Trivial liveness signal: the process can handle a request at all.
+
+    Deliberately checks NOTHING (no DB, no external service) — a process that
+    can run this function is, by definition, alive. Never confuse this with
+    readiness (below): a process can be alive while its database is down.
+    """
+    return {"status": OK, "service": "backend_core"}
+
+
+def readiness_report() -> dict:
+    """Minimal readiness signal: can this process serve real traffic?
+
+    Checks only the database — almost every Backend Core endpoint needs it,
+    so a DB outage genuinely means "not ready". The Intelligence Engine and
+    the Content Renderer are deliberately EXCLUDED here: they are optional,
+    per-request downstream calls (already surfaced as clear 502/503 on the
+    affected endpoints, see ``apps.integrations_bridge.intelligence_sync`` and
+    ``apps.integrations_bridge.services``), not a reason to mark the whole
+    service "not ready". Their operational detail stays behind the
+    staff-only aggregated endpoint (``check_dependencies``) — this endpoint
+    is intentionally public (like the Intelligence Engine's and Content
+    Renderer's own ``/health``) and exposes nothing beyond ok/not-ready.
+    """
+    db_status, _duration_ms, _detail = _check_database()
+    return {"status": OK if db_status == OK else UNAVAILABLE, "service": "backend_core"}
+
+
 def check_dependencies(*, timeout=None, prober=None, include_database=True) -> dict:
     """Probe the technical dependencies and return a normalized report.
 

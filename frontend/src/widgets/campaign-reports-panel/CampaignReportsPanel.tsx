@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import type { Report } from '@/entities/report'
 import { useCampaignReports } from '@/entities/report'
 import {
   Badge,
@@ -19,6 +20,12 @@ interface CampaignReportsPanelProps {
 
 function humanize(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function reportFailureMessage(report: Report): string | undefined {
+  if (report.status !== 'failed') return undefined
+  const error = report.metadata?.error
+  return typeof error === 'string' && error ? error : undefined
 }
 
 /**
@@ -56,6 +63,11 @@ export function CampaignReportsPanel({
               <span className={listStyles.itemMeta}>
                 {humanize(report.report_type)}
               </span>
+              {reportFailureMessage(report) && (
+                <span className={listStyles.itemMeta} role="alert">
+                  {reportFailureMessage(report)}
+                </span>
+              )}
             </div>
             <Badge variant={statusToBadgeVariant(report.status)}>
               {report.status ?? 'unknown'}

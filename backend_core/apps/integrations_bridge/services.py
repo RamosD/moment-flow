@@ -123,6 +123,7 @@ def create_and_submit_external_job(
     idempotency_key=None,
     metadata=None,
     retry_count=0,
+    request_id=None,
 ):
     """Create an ExternalJobReference and submit it (or simulate / stay queued).
 
@@ -134,6 +135,13 @@ def create_and_submit_external_job(
       - ``EXTERNAL_JOBS_ENABLED=False`` → job stays ``queued`` (no call).
       - ``EXTERNAL_JOBS_DRY_RUN=True``  → submission simulated, status ``submitted``.
       - otherwise                       → real HTTP call via the internal client.
+
+    ``request_id``, when given (STG-PRE-005 correlation-id, usually the HTTP
+    request's ``request.correlation_id``), is used as the job's own
+    ``request_id`` instead of a freshly generated one — this is what lets a
+    Report/MediaKit/ContentPackRequest, its job and the Content Renderer's
+    logs share the same id. When omitted (e.g. retries, management commands)
+    a fresh id is generated exactly as before.
     """
     related_entity_id = str(related_entity_id) if related_entity_id else ""
     key = idempotency_key or default_idempotency_key(job_type, related_entity_id)
@@ -147,7 +155,7 @@ def create_and_submit_external_job(
     if provider is None:
         provider = registry.resolve_provider(job_type)
 
-    request_id = uuid.uuid4().hex
+    request_id = request_id or uuid.uuid4().hex
 
     # 1) Create the reference BEFORE any external call.
     job = ExternalJobReference.objects.create(
@@ -242,6 +250,7 @@ def _mark_failed(job, message, *, response_payload=None) -> None:
     job.save(update_fields=fields)
     _audit_submission(job, simulated=False, queued=False, failed=True)
     log_job_event("job_submission_failed", job, level=logging.WARNING)
+    _propagate_submission_failure(job, message)
 
 
 def _mark_timeout(job, message) -> None:
@@ -251,6 +260,40 @@ def _mark_timeout(job, message) -> None:
     job.save(update_fields=["status", "failed_at", "error_message", "updated_at"])
     _audit_submission(job, simulated=False, queued=False, failed=True)
     log_job_event("job_timeout", job, level=logging.WARNING)
+    _propagate_submission_failure(job, message)
+
+
+# Job types whose product entity must be told about a submission-time failure.
+# ``_mark_failed``/``_mark_timeout`` fire when the external service was never
+# reached (the job never left this process), so no renderer callback will ever
+# arrive for it — without this, the Report/MediaKit/ContentPackRequest would
+# stay stuck in its initial non-terminal state (queued/draft) forever while the
+# job itself already says failed/timeout. Reusing the same handler the real
+# callback path uses keeps both failure sources consistent.
+def _entity_failure_handlers():
+    from apps.content.callbacks import apply_content_generation_callback
+    from apps.reports.callbacks import (
+        apply_media_kit_generation_callback,
+        apply_report_generation_callback,
+    )
+
+    return {
+        ExternalJobReference.JobType.REPORT_GENERATION: apply_report_generation_callback,
+        ExternalJobReference.JobType.MEDIA_KIT_GENERATION: apply_media_kit_generation_callback,
+        ExternalJobReference.JobType.CONTENT_GENERATION: apply_content_generation_callback,
+    }
+
+
+def _propagate_submission_failure(job, message) -> None:
+    handler = _entity_failure_handlers().get(job.job_type)
+    if handler is None:
+        return
+    try:
+        handler(job, status=job.status, error_message=message)
+    except Exception:  # noqa: BLE001 — never let entity propagation break submission
+        log_job_event(
+            "submission_failure_propagation_error", job, level=logging.ERROR
+        )
 
 
 def _audit_submission(job, *, simulated, queued, failed=False) -> None:

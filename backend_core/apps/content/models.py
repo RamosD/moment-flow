@@ -15,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import (
     BaseModel,
+    CorrelationIdModel,
     CreatedUpdatedByModel,
     WorkspaceOwnedModel,
 )
@@ -209,7 +210,7 @@ class ContentPackTemplate(BaseModel):
         return f"{self.content_pack.pack_key} / {self.template.template_key}"
 
 
-class ContentPackRequest(BaseModel, WorkspaceOwnedModel):
+class ContentPackRequest(BaseModel, WorkspaceOwnedModel, CorrelationIdModel):
     """A request to generate a content pack (queued; rendered later elsewhere)."""
 
     class Status(models.TextChoices):

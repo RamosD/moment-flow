@@ -56,6 +56,34 @@ class TestReportCreation:
         assert resp.status_code == 400
         assert "campaign" in resp.data
 
+    def test_create_populates_correlation_id_from_request_header(
+        self, client_for, owner, workspace, caplog
+    ):
+        """STG-PRE-005: X-Request-ID ends up on the Report and its job, and is
+        actually logged at creation (not just computed and dropped)."""
+        import logging
+
+        from apps.integrations_bridge.models import ExternalJobReference
+
+        headers = {**ws_header(workspace), "HTTP_X_REQUEST_ID": "trace-report-1"}
+        with caplog.at_level(logging.INFO, logger="reports"):
+            resp = client_for(owner).post(
+                REPORTS_URL,
+                {"report_type": "monthly_report", "title": "Traced report"},
+                format="json",
+                **headers,
+            )
+        assert resp.status_code == 201
+        assert resp.data["correlation_id"] == "trace-report-1"
+        report = Report.objects.get(id=resp.data["id"])
+        assert report.correlation_id == "trace-report-1"
+        assert "event=report_created" in caplog.text
+        assert "correlation_id=trace-report-1" in caplog.text
+        job = ExternalJobReference.objects.get(
+            related_entity_type="report", related_entity_id=str(report.id)
+        )
+        assert job.request_id == "trace-report-1"
+
 
 @pytest.mark.django_db
 class TestReportSections:
