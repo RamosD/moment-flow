@@ -2,10 +2,14 @@
 
 > Fase: `06_staging_infraestrutura_real_local` (fecho — STG-LOCAL-012)
 > Data: 2026-07-03
-> Fonte: os 11 relatórios em `resultados_execucao/` (Prompts 01–11) + o
-> relatório deste fecho (Prompt 12), `arquitectura_staging_local.md`,
-> `runbook_staging_local.md`, `01_backlog.md`, e validação final executada
-> nesta iteração (código e stack reais, não apenas leitura de relatórios).
+> Fonte: os relatórios em `resultados_execucao/` (Prompts 01–12,
+> `arquitectura_staging_local.md`, `runbook_staging_local.md`,
+> `01_backlog.md`, e validação final executada nesta iteração (código e
+> stack reais, não apenas leitura de relatórios). Nota: no momento em que
+> este documento foi originalmente escrito (fecho, Prompt 12), o Prompt 08
+> ainda não tinha um relatório autónomo — a sua execução real (E2E local)
+> está descrita na secção 6 abaixo e foi depois também materializada,
+> retroactivamente, em `resultados_execucao/prompt_08_e2e_local_resultado.md`.
 
 ---
 
@@ -60,7 +64,7 @@ Ver §7 para a justificação directa contra as cinco opções do backlog.
 | **Secrets locais** | ✅ Implementado e validado | Mecanismo `*.env.staging.local` por sítio, nunca versionado (confirmado por `git ls-files`); rotação real do `INTERNAL_API_TOKEN` testada (chamada síncrona real + callback assíncrono real); falhas seguras testadas (token ausente/errado/dessincronizado) (Prompt 05) |
 | **Scripts locais** | ✅ Implementado e validado | 7 scripts PowerShell; ciclos reais de `infra-up`/`infra-down`/`apps-up`/`apps-down`/`health`/`reset` (bloqueio) executados; 2 bugs reais encontrados e corrigidos durante a própria validação (Prompt 06) |
 | **Quality gate** | ✅ Implementado e validado | `staging-local-quality-gate.ps1`; execução completa real 9/9 `PASS` (Prompt 07), **re-confirmado nesta iteração de fecho** (ver §5) |
-| **E2E local** | ✅ Implementado e validado nesta iteração de fecho | `pnpm test:e2e` real contra PostgreSQL + MinIO + IE real + Content Renderer real, sem dry-run: **12/12 `PASS`** numa execução limpa, incluindo o teste de isolamento de rede via captura real do browser. Ver §6 para o relato completo, incluindo o achado de 1 flake não-reprodutível numa primeira tentativa |
+| **E2E local** | ✅ Implementado e validado nesta iteração de fecho | `pnpm test:e2e` real contra PostgreSQL + MinIO + IE real + Content Renderer real, sem dry-run: **12/12 `PASS`** numa execução limpa, incluindo o teste de isolamento de rede via captura real do browser. Ver §6 para o relato completo, incluindo o achado de 1 flake não-reprodutível numa primeira tentativa. Relatório autónomo (retroactivo): `resultados_execucao/prompt_08_e2e_local_resultado.md` |
 | **Segurança** | ✅ Implementado e validado | Frontend isolado, tokens internos server-to-server, health `dependencies` staff-only, IE/CR rejeitam token vazio/errado; **2 violações reais encontradas e corrigidas**: listagem pública do bucket MinIO, e PostgreSQL/MinIO publicados em `0.0.0.0` (Prompt 09) |
 | **Observabilidade** | ✅ Implementado e validado | Correlation-id rastreado ponta-a-ponta com um fluxo real (27 linhas Backend Core, 2 IE, 27+ Content Renderer); 5 cenários de falha testados contra a stack real; 1 achado de risco documentado (sem timeout curto em ligações BD "normais") (Prompt 10) |
 | **Runbook** | ✅ Implementado | Consolidado em 22 secções (Prompt 11), actualizado nesta iteração de fecho com o resultado real do E2E |
@@ -183,9 +187,9 @@ Justificação directa contra as cinco opções permitidas:
 |---|---|---|
 | Confundir "staging local formal" com "staging externo" ou "produção" | Alto (se não corrigido) | Mitigado por este documento e pela arquitectura — "staging local formal" é explicitamente definido como uma máquina única, sem SLA, sem alta disponibilidade |
 | Flake do E2E observado numa primeira tentativa | Médio | Investigado, não-reprodutível numa segunda tentativa imediata; a causa mais provável (contenção de recursos numa sessão muito longa) não é um bug de produto — recomenda-se monitorizar em execuções futuras, especialmente em máquinas/sessões mais curtas |
-| Ligações Django→PostgreSQL "normais" sem timeout curto (achado STG-LOCAL-010) | Médio-Alto | Documentado, não corrigido (fora do âmbito de uma iteração de observabilidade); um PostgreSQL em baixo em staging local produz pedidos pendurados em vez de erros rápidos |
+| Ligações Django→PostgreSQL "normais" sem timeout curto (achado STG-LOCAL-010) | ~~Médio-Alto~~ Corrigido | **Corrigido em STG-HARD-002 (fase 07):** `DB_CONNECT_TIMEOUT_SECONDS` (default `5`) limita a ligação; medido antes/depois — `130.6s` → `~5.2s` (`/ready/`), `>150s` → `~31s` (endpoint normal). Ver runbook §14 |
 | Sem validação por terceiro | Médio | Pendência organizacional, não técnica; recomenda-se antes de qualquer decisão de expandir o uso desta stack para mais operadores |
-| Credenciais MinIO reutilizam a conta "root" do container | Baixo | Aceitável para staging local descartável; não replicar este padrão em produção |
+| Credenciais MinIO reutilizam a conta "root" do container | ~~Baixo~~ Corrigido | **Corrigido em STG-HARD-003 (fase 07):** Content Renderer usa um utilizador de serviço dedicado (`chartrex_renderer`), policy mínima (`s3:PutObject`+`s3:GetObject`, sem `ListBucket`/delete/admin). Ver runbook §11 |
 | Sem agregação central de logs | Baixo | Aceitável para staging local de um único operador (premissa obrigatória: "não criar stack pesada") |
 | `docker logs` sem rotação/limite explícito | Baixo | Herda o default do Docker; staging local de curta duração |
 
@@ -195,9 +199,9 @@ Justificação directa contra as cinco opções permitidas:
 
 - `DATABASE_URL` não é suportado (por desenho) — só variáveis discretas `DB_*`.
 - `signed_url` não existe como campo — só `public_url` (herdado da fase 05; MinIO local usa leitura anónima de objecto, não assinatura).
-- Credenciais MinIO reutilizam a conta "root" do container, não uma credencial dedicada não-root.
+- ~~Credenciais MinIO reutilizam a conta "root" do container~~ **Corrigido (STG-HARD-003, fase 07)** — utilizador de serviço dedicado com policy mínima.
 - Sem agregação central de logs entre os 3 serviços — consulta por ficheiro/serviço individual.
-- Ligações Django→PostgreSQL "normais" sem `connect_timeout` curto configurado (só o endpoint `/ready/` tem).
+- ~~Ligações Django→PostgreSQL "normais" sem `connect_timeout` curto configurado~~ **Corrigido (STG-HARD-002, fase 07)**. Risco residual menor: o caminho de erro HTTP de um endpoint normal (não `/ready/`) fica bounded a `~31s`, não `~5s`, por causa da página de erro técnica do Django em `DEBUG=True` — ver runbook §14.
 - Validação por terceiro sem contexto prévio não foi feita.
 - Sem CI/CD real neste repositório — o quality gate é reutilizável por CI futura, mas nenhuma pipeline foi criada (fora do escopo desta fase, por desenho).
 - `MediaKit.Status` não tem `FAILED` próprio (herdado da fase 05) — convenção via `metadata.generation_status`.

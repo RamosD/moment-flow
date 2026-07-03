@@ -127,6 +127,18 @@ ASGI_APPLICATION = "config.asgi.application"
 # Defaults to SQLite for local development. Set DB_ENGINE=postgres to use
 # PostgreSQL (psycopg is already installed).
 
+# Short, configurable connect timeout for PostgreSQL only (STG-HARD-002).
+# Without it, a request that needs a fresh connection (Django opens one per
+# request by default — CONN_MAX_AGE is unset/0 here) can hang for minutes if
+# PostgreSQL is unreachable (observed in fase 06, prompt_10 §6.1): stopping the
+# container leaves the host port in a state where the OS silently drops the
+# connection attempt instead of refusing it immediately, so only an
+# application-level timeout bounds the wait. `/ready/`'s own DB probe
+# (`apps.integrations_bridge.health._check_database`) reuses this same
+# `default` connection, so it is protected by the same bound — this setting is
+# irrelevant to SQLite, which has no TCP connection to hang on.
+DB_CONNECT_TIMEOUT_SECONDS = config("DB_CONNECT_TIMEOUT_SECONDS", default=5, cast=int)
+
 if config("DB_ENGINE", default="sqlite") == "postgres":
     DATABASES = {
         "default": {
@@ -136,6 +148,9 @@ if config("DB_ENGINE", default="sqlite") == "postgres":
             "PASSWORD": config("DB_PASSWORD"),
             "HOST": config("DB_HOST", default="localhost"),
             "PORT": config("DB_PORT", default="5432"),
+            "OPTIONS": {
+                "connect_timeout": DB_CONNECT_TIMEOUT_SECONDS,
+            },
         }
     }
 else:

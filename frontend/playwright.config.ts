@@ -19,11 +19,23 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5200'
 export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
+  // Redacts Authorization/Cookie headers and login request/response bodies
+  // from every retained trace.zip — see `e2e/global-teardown.ts` for why this
+  // is needed (STG-HARD-007). Always runs, pass or fail.
+  globalTeardown: './e2e/global-teardown.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   retries: 0,
-  reporter: [['list']],
+  // `list` for terminal readability (unchanged — the quality gate only
+  // checks the process exit code, never parses this output). `html`
+  // (STG-HARD-007) persists a browsable report under `playwright-report/`
+  // that surfaces screenshots, traces *and* custom `testInfo.attach()`
+  // diagnostics (see `e2e/diagnostics.ts`) as clickable items — without it,
+  // a custom attachment's body only lives zipped inside `trace.zip`, one
+  // `show-trace` away from being found. `open: 'never'`: local-only, never
+  // auto-launches a browser (matters for `-WithE2E` in the quality gate).
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
     trace: 'retain-on-failure',

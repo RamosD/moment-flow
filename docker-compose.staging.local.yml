@@ -103,6 +103,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chartrex_staging_minio}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chartrex_staging_local_only}
       STORAGE_BUCKET: ${STORAGE_BUCKET:-chartrex-staging}
+      # Dedicated non-root service user for the Content Renderer (STG-HARD-003).
+      # Root (MINIO_ROOT_USER/PASSWORD above) stays reserved for administration.
+      MINIO_RENDERER_USER: ${MINIO_RENDERER_USER:-chartrex_renderer}
+      MINIO_RENDERER_PASSWORD: ${MINIO_RENDERER_PASSWORD:-chartrex_renderer_local_only}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -137,6 +141,36 @@ services:
         POLICY
         mc anonymous set-json /tmp/anonymous-policy.json "local/$$STORAGE_BUCKET"
         echo "bucket $$STORAGE_BUCKET pronto (leitura anonima: GetObject apenas, sem listagem)"
+
+        # DECISÃO DOCUMENTADA (STG-HARD-003): o Content Renderer deixa de usar
+        # as credenciais root do MinIO. Recebe, em vez disso, um utilizador de
+        # serviço dedicado (MINIO_RENDERER_USER) com uma policy mínima: apenas
+        # s3:PutObject e s3:GetObject, limitados a este bucket — sem
+        # s3:ListBucket (o Content Renderer nunca lista o bucket, só escreve
+        # `PutObjectCommand`; leitura pública já é servida pela policy anónima
+        # acima, não por esta credencial), sem s3:DeleteObject (nenhum caminho
+        # de código apaga objectos) e sem nenhuma permissão administrativa. O
+        # utilizador root fica reservado para administração local
+        # (`mc admin ...`, rotação de credenciais, este próprio script).
+        cat > /tmp/renderer-policy.json <<POLICY
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:PutObject", "s3:GetObject"],
+              "Resource": ["arn:aws:s3:::$$STORAGE_BUCKET/*"]
+            }
+          ]
+        }
+        POLICY
+        mc admin policy create local chartrex-renderer-policy /tmp/renderer-policy.json
+        mc admin user add local "$$MINIO_RENDERER_USER" "$$MINIO_RENDERER_PASSWORD"
+        # Idempotente: reexecutar este script quando a policy já estiver
+        # attach-ada devolve um erro "already attached" — não é uma falha real,
+        # por isso não deve travar o script (o resto já terminou com sucesso).
+        mc admin policy attach local chartrex-renderer-policy --user "$$MINIO_RENDERER_USER" || true
+        echo "utilizador de servico $$MINIO_RENDERER_USER pronto (policy: PutObject+GetObject neste bucket, sem ListBucket, sem delete, sem admin)"
     networks:
       - chartrex_staging_local
     restart: "no"

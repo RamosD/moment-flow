@@ -86,7 +86,7 @@ negados):
 
 | Ficheiro | Contém |
 |---|---|
-| `.env.staging.local` (raiz) | Credenciais do PostgreSQL/MinIO do compose |
+| `.env.staging.local` (raiz) | Credenciais do PostgreSQL/MinIO do compose — inclui `MINIO_ROOT_USER`/`PASSWORD` (só administração) **e**, desde STG-HARD-003, `MINIO_RENDERER_USER`/`PASSWORD` (utilizador de serviço do Content Renderer, policy mínima) |
 | `backend_core/.env.staging.local` | `DB_*`, `INTERNAL_API_TOKEN`, `E2E_PASSWORD` |
 | `intelligence_engine/.env.staging.local` | `INTERNAL_API_TOKEN` |
 | `content_renderer/.env.staging.local` | `INTERNAL_API_TOKEN`, `STORAGE_*` |
@@ -121,6 +121,7 @@ Todos em `scripts/`, todos PowerShell, todos idempotentes:
 | `staging-local-apps-down.ps1` | Pára só os processos arrancados por `apps-up.ps1` (por PID rastreado, árvore completa) | Não |
 | `staging-local-health.ps1` | Verifica infraestrutura + serviços aplicacionais activos, confirmando a **identidade** de cada resposta, não só o HTTP 2xx | Não |
 | `staging-local-quality-gate.ps1` | Corre todas as suites de validação (§11) num único comando | Não |
+| `cleanup-e2e-run.ps1` (STG-HARD-006) | Apaga PostgreSQL + MinIO de **um único `--run-id`** (ver §17.1) | Sim, mas **escopo estrito ao run-id** — nunca um reset completo |
 
 `scripts/lib/staging-local-common.ps1` não é executável directamente — é
 importado pelos scripts acima.
@@ -224,17 +225,38 @@ O provider `local` (filesystem) **continua o default de desenvolvimento**
 — `STORAGE_PROVIDER=s3` é uma escolha explícita para esta fase, não uma
 substituição obrigatória do modo dev.
 
-**Contrato validado de facto** (`resultados_execucao/prompt_04_minio_storage_resultado.md`):
+**Contrato validado de facto** (`resultados_execucao/prompt_04_minio_storage_resultado.md`,
+revalidado com as credenciais não-root em
+`resultados_execucao/prompt_03_minio_credenciais_nao_root_resultado.md`):
 upload real dos três tipos de artefacto (`report.pdf`, `media_kit.pdf`,
 outputs de content pack), `Asset.storage_provider="s3"`,
 `Asset.storage_key`, e **`Asset.public_url` preenchido e efectivamente
 descarregável** (`http://127.0.0.1:9000/chartrex-staging/workspaces/<ws>/jobs/<job>/<ficheiro>`,
 `200`, ficheiro real confirmado por assinatura de bytes).
 
-Verificar objectos manualmente:
+**Credenciais do Content Renderer (STG-HARD-003):** `STORAGE_ACCESS_KEY` /
+`STORAGE_SECRET_KEY` são `MINIO_RENDERER_USER` / `MINIO_RENDERER_PASSWORD`
+(`.env.staging.local` na raiz), **não** `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
+O utilizador `chartrex_renderer` tem uma policy mínima
+(`chartrex-renderer-policy`): apenas `s3:PutObject` + `s3:GetObject`,
+limitados ao bucket `chartrex-staging` — sem `s3:ListBucket`, sem
+`s3:DeleteObject`, sem nenhuma acção administrativa. Root fica reservado
+para administração (comandos `mc admin ...` abaixo, e o próprio
+`minio-bucket-init`, que cria/actualiza o utilizador e a policy de forma
+idempotente a cada arranque da infraestrutura).
+
+Verificar objectos e credenciais manualmente (usar sempre o alias `root`
+para `mc admin`/`mc ls` — o utilizador `chartrex_renderer` não consegue
+nem uma coisa nem outra, por desenho):
 
 ```powershell
-docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest -c "mc alias set local http://minio:9000 <user> <password> && mc ls --recursive local/chartrex-staging"
+# Root — administração (listar objectos, inspeccionar utilizadores/policies).
+docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest -c "mc alias set root http://minio:9000 <MINIO_ROOT_USER> <MINIO_ROOT_PASSWORD> && mc ls --recursive root/chartrex-staging"
+docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest -c "mc alias set root http://minio:9000 <MINIO_ROOT_USER> <MINIO_ROOT_PASSWORD> && mc admin user info root chartrex_renderer && mc admin policy info root chartrex-renderer-policy"
+
+# chartrex_renderer — deve FALHAR nestas duas operações (prova de que a policy é mínima):
+docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest -c "mc alias set svc http://minio:9000 <MINIO_RENDERER_USER> <MINIO_RENDERER_PASSWORD> && mc ls svc/chartrex-staging"        # esperado: Access Denied
+docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest -c "mc alias set svc http://minio:9000 <MINIO_RENDERER_USER> <MINIO_RENDERER_PASSWORD> && mc admin user list svc"              # esperado: Access Denied
 ```
 
 ## 12. E2E
@@ -265,11 +287,72 @@ outputs de content pack) e `Asset.public_url` preenchido para os 4.
 a aguardar o fecho do diálogo de criação de media kit) — investigado,
 confirmado **não-reprodutível** numa segunda execução imediata a seguir
 (12/12 limpo, o mesmo passo em 1.9s). Ver
-`resultados_execucao/prompt_12_fecho_staging_local_resultado.md` para a
-análise completa. Não classificado como bug de produto — consistente com
+`resultados_execucao/prompt_12_fecho_staging_local_resultado.md` §4 para o
+registo original desta execução, e
+`resultados_execucao/prompt_08_e2e_local_resultado.md` para o relatório
+autónomo (**retroactivo** — a execução aconteceu de facto durante o
+Prompt 12, não numa iteração dedicada ao Prompt 08; o relatório retroactivo
+só reorganiza essa mesma evidência sob o número de prompt correcto, sem
+nova execução). Não classificado como bug de produto — consistente com
 contenção de recursos pontual numa sessão longa, não um problema de lógica
 (a chamada API directa equivalente respondeu em 0.2s quando testada
 isoladamente no mesmo momento).
+
+**Actualização (fase 07, STG-HARD-001):** os passos de criação de acção com
+artefacto (`report_request`/`media_kit_request`/`content_pack`) passaram a
+esperar a resposta HTTP real (`page.waitForResponse`) em vez de só o fecho
+do diálogo — ver `frontend/e2e/main-flow.spec.ts`. O relatório dedicado a
+essa investigação (STG-HARD-001) ainda está pendente à parte; esta secção
+regista apenas o resultado prático observado durante a validação desta
+iteração de diagnóstico (STG-HARD-007): **5 execuções consecutivas, 12/12
+`PASS` em todas**, sem nenhum flake observado.
+
+## 12.1 Diagnóstico de falhas E2E (STG-HARD-007)
+
+Quando um passo E2E falha, além do erro do próprio `expect`, ficam
+disponíveis (sem precisar de repetir a execução):
+
+| Artefacto | Onde | O que mostra |
+|---|---|---|
+| Screenshot | `frontend/test-results/<teste>/test-failed-1.png` | Estado visual do browser no momento da falha |
+| Trace | `frontend/test-results/<teste>/trace.zip` | DOM, rede, consola, passo-a-passo — abrir com `pnpm exec playwright show-trace <caminho>` |
+| Error context | `frontend/test-results/<teste>/error-context.md` | Resumo da falha em Markdown (gerado pelo Playwright) |
+| Diagnóstico do teste | Aba **Attachments** do trace viewer, item `e2e-diagnostics` | JSON com `run_id`, `X-Request-ID`s observados durante o teste, `workspace_id`/`campaign_id`, contagem de pedidos por endpoint — ver `frontend/e2e/diagnostics.ts` |
+| Relatório navegável | `frontend/playwright-report/index.html` (`pnpm exec playwright show-report`) | A mesma informação acima, numa UI, sem `show-trace` manual |
+| Contexto da execução | stdout do `pnpm test:e2e` (reporter `list`) | Uma linha `[e2e] run_id=... workspace=...`, impressa no arranque de cada execução |
+| Logs locais correlacionáveis | `.local-runtime/logs/{backend_core.err,intelligence_engine.out,content_renderer.out,frontend.out}.log` | Grep pelo `run_id` ou por qualquer `X-Request-ID` da tabela `e2e-diagnostics` acima — os mesmos 4 ficheiros já documentados em §14 |
+
+**Correlação prática**: um `X-Request-ID` observado no attachment
+`e2e-diagnostics` aparece nos 3 serviços (Backend Core, Intelligence
+Engine, Content Renderer) exactamente como descrito em §14
+("Correlation-id ponta-a-ponta") — o mecanismo não é novo, só passou a
+estar automaticamente recolhido e anexado ao teste que falhou, em vez de
+exigir um grep manual reactivo.
+
+**Segurança dos artefactos (validado nesta iteração)**:
+- `frontend/e2e/global-teardown.ts` redige, em todo `trace.zip` retido, o
+  cabeçalho `Authorization`/`Cookie`/`Set-Cookie`/`X-Internal-Token` (troca
+  o valor por `[REDACTED]`) e o corpo completo dos pedidos/respostas de
+  login/refresh (`/auth/token/`, `/auth/token/refresh/`) — sem isto, a
+  captura de rede nativa do Playwright grava o JWT em claro em **todos** os
+  pedidos autenticados, e o `E2E_PASSWORD` em claro no pedido de login;
+  ambos foram confirmados presentes antes desta correcção (achado real
+  desta iteração) e confirmados ausentes depois, por grep dedicado sobre o
+  `trace.zip` descomprimido.
+- Corre sempre (`globalTeardown`, garantido pelo Playwright mesmo que
+  testes falhem), sem depender de `test:e2e` ser invocado de uma forma
+  específica — funciona igual a partir do quality gate (`-WithE2E`) ou
+  directamente.
+- O attachment `e2e-diagnostics` nunca inclui `E2E_PASSWORD`/
+  `INTERNAL_API_TOKEN` — só ids (`run_id`, `X-Request-ID`, `workspace_id`,
+  `campaign_id`) e contagens de pedidos por endpoint.
+- Os excertos de log anexados (`collectLogExcerpts` em `diagnostics.ts`)
+  aplicam uma segunda camada de redacção defensiva sobre as mesmas 4
+  variáveis, mesmo os serviços já nunca as escrevendo por desenho (ver §14).
+
+**Nunca usar isto como substituto dos asserts** — o teste continua a falhar
+exactamente da mesma forma (mesma mensagem, mesmo `expect`); estes
+artefactos só encurtam o tempo até perceber *porquê*.
 
 ## 13. Segurança
 
@@ -352,11 +435,36 @@ docker logs chartrex_staging_postgres --tail 50
 docker exec chartrex_staging_postgres pg_isready -U <user> -d <db>
 ```
 
-**Achado real:** `/ready/` falha rápido e controlado quando o PostgreSQL
-está em baixo (`503`, timeout curto configurado). Um pedido normal que lê
-a base de dados **não tem essa protecção** — pode ficar pendurado vários
-minutos em vez de falhar rápido. Se um pedido parecer "pendurado", testar
-`/ready/` primeiro.
+**Actualizado (STG-HARD-002, fase 07):** o achado original desta secção —
+"`/ready/` já falha rápido, mas um pedido normal não tem protecção
+equivalente" — estava **parcialmente incorrecto**: medido de facto (fase
+07), `/ready/` também ficava pendurado (~130s) quando o PostgreSQL estava
+em baixo, porque `_check_database()` nunca teve nenhum timeout próprio —
+`HEALTHCHECK_DEPENDENCY_TIMEOUT_SECONDS` só protege as sondas HTTP ao
+Intelligence Engine/Content Renderer, nunca a base de dados. Corrigido
+adicionando `DB_CONNECT_TIMEOUT_SECONDS` (default `5`, só para
+`DB_ENGINE=postgres`) a `OPTIONS.connect_timeout` em
+`backend_core/config/settings.py` — ver
+`resultados_execucao/prompt_02_timeout_postgresql_resultado.md` para as
+medições completas antes/depois. Com o PostgreSQL em baixo:
+
+- `/ready/` falha em **~5.1–5.3s** (bounded, medido, `503`).
+- Um pedido normal cuja primeira interacção com a BD é a query em si (ex.:
+  `POST /api/v1/auth/token/`) falha em **~31s** — muito melhor que os
+  minutos anteriores, mas mais lento que `/ready/`. Causa identificada: com
+  `DEBUG=True` (staging local), uma excepção não tratada aciona a página de
+  erro técnica do Django, que reavalia os *context processors* de
+  `TEMPLATES` (incluindo `django.contrib.auth.context_processors.auth`),
+  cada um tentando a sua própria ligação (cada uma já bounded a `~5s`, mas
+  em série). Confirmado isoladamente: uma query ORM directa, fora do
+  caminho HTTP/DEBUG, fica bounded a `~5.07s`, igual ao `/ready/` — o
+  `connect_timeout` em si funciona correctamente; o tempo extra é
+  exclusivo da renderização de erro em modo `DEBUG`. Não corrigido nesta
+  iteração (fora do âmbito estreito de STG-HARD-002; ver relatório
+  §"Riscos remanescentes").
+
+Se um pedido parecer "pendurado", testar `/ready/` primeiro — continua a
+ser o sinal mais rápido, mesmo não sendo mais o único protegido.
 
 ## 15. Quality gate local
 
@@ -399,6 +507,47 @@ confirmação escrita antes de tocar em qualquer volume. Sem `-IAmSure`, o
 script bloqueia imediatamente e não altera nada (validado — ver
 `resultados_execucao/prompt_06_scripts_locais_resultado.md` §5).
 
+## 17.1 Cleanup por run-id (STG-HARD-006, não destrutivo)
+
+**Diferente do reset acima** — este NÃO apaga tudo, só o que pertence a um
+único `--run-id` (o mesmo token passado a `seed_e2e_run`, incluindo o das
+sessões E2E via `global-setup.ts`). Útil depois de sessões repetidas de
+E2E/smoke, sem esperar por um reset completo.
+
+```powershell
+# Pré-visualizar (Postgres: contagens; MinIO: nº de objectos) — não apaga nada:
+pwsh -ExecutionPolicy Bypass -File scripts\cleanup-e2e-run.ps1 -RunId <run-id> -DryRun
+
+# Limpar de facto (pede para escrever o run-id de volta, para confirmar):
+pwsh -ExecutionPolicy Bypass -File scripts\cleanup-e2e-run.ps1 -RunId <run-id>
+
+# Não-interactivo (scripts/CI local) — salta a confirmação:
+pwsh -ExecutionPolicy Bypass -File scripts\cleanup-e2e-run.ps1 -RunId <run-id> -Force
+```
+
+Como funciona: `manage.py cleanup_e2e_run` resolve o workspace/utilizador
+exactos do run-id (pelo email `e2e-{run_id}@example.local` e pelo nome do
+workspace `E2E Workspace {run_id}` — os mesmos que `seed_e2e_run` cria) e
+apaga em cascata só o que lhes pertence (campanhas, artistas, tracks, acções,
+reports, media kits, content pack requests/outputs, assets). `ExternalJobReference`
+e `AuditEvent` são apagados explicitamente à parte, porque apontam para
+`workspace` com `on_delete=SET_NULL` — um simples apagar do workspace deixá-los-ia
+orfãos (linha mantida, FK a `null`), não removidos. O script depois remove os
+objectos MinIO sob `workspaces/<workspace_id>/` (o mesmo layout de chaves do
+Content Renderer), usando credenciais **root** — o utilizador de serviço
+`chartrex_renderer` (STG-HARD-003) não tem `s3:ListBucket` nem
+`s3:DeleteObject`, de propósito.
+
+- Um `--run-id` que não corresponda a nada **não é um erro** — é idempotente
+  (nada a fazer, exit 0).
+- Um `--run-id` vazio/só espaços é sempre bloqueado.
+- Nunca apaga RBAC global (`Permission`/`Role` de sistema) nem dados de
+  conteúdo partilhados (`Template`/`ContentPack`/`ContentPackTemplate`) —
+  nenhum destes tem FK para `workspace`.
+- Validado (`resultados_execucao/prompt_04_cleanup_run_id_resultado.md`):
+  dois run-ids distintos, dry-run, limpeza real de um, confirmação de que o
+  outro fica intacto (PostgreSQL e MinIO), reseed limpo do run-id limpo.
+
 ## 18. Troubleshooting (achados reais desta fase)
 
 | Sintoma | Causa provável | Resolução |
@@ -411,7 +560,7 @@ script bloqueia imediatamente e não altera nada (validado — ver
 | Chamada de intelligence devolve `503` | Intelligence Engine em baixo | Log: `WARNING ... intelligence_call unavailable`; `curl http://127.0.0.1:8201/health`; reiniciar com `apps-up.ps1 -Services intelligence_engine` |
 | Report/MediaKit/ContentPack `status=failed`, `metadata.error="External service is unavailable."` | Content Renderer em baixo | Log Backend Core: `WARNING ... job_submission_failed`; `curl http://127.0.0.1:8202/health`; reiniciar com `apps-up.ps1 -Services content_renderer` |
 | Report/MediaKit `status=failed` mas o job foi aceite (`202`) | MinIO em baixo durante o render | Log Content Renderer: `render.completed status=failed`; `docker compose ps minio`; `docker compose start minio` |
-| Pedido a endpoint que lê a BD fica pendurado sem resposta | PostgreSQL em baixo (ligação normal sem timeout curto) | Testar `/ready/` primeiro (falha rápido); `docker compose start postgres` |
+| Pedido a endpoint que lê a BD fica pendurado sem resposta | PostgreSQL em baixo — **corrigido (STG-HARD-002, fase 07)**: `DB_CONNECT_TIMEOUT_SECONDS` (default `5`) limita a ligação; `/ready/` falha em `~5s`, um endpoint normal em `~31s` (ver §14) | Testar `/ready/` primeiro (mais rápido); `docker compose start postgres`; se persistir >31s, é uma regressão, reportar |
 | Callback com `403 Invalid or missing internal token` | `X-Internal-Token` errado/ausente | Esperado e seguro — log `WARNING ... callback_rejected reason=invalid_token`, token nunca aparece no log; confirmar sincronização entre os 3 serviços |
 
 ## 19. Matriz de sintomas (referência rápida, pedida pelo backlog)
@@ -448,11 +597,24 @@ qualificação.
   retry imediato).
 - Sem agregação central de logs entre serviços (§14) — aceitável para
   staging local de um único operador, não para produção.
-- Ligações Django→PostgreSQL "normais" sem timeout curto configurado
-  (achado §14) — documentado, não corrigido (fora do âmbito de uma
-  iteração de observabilidade).
-- Credenciais MinIO reutilizam a conta "root" do container — aceitável
-  para staging local descartável.
+- **Corrigido (STG-HARD-002, fase 07):** ligações Django→PostgreSQL
+  "normais" agora têm `DB_CONNECT_TIMEOUT_SECONDS` (default `5`, só
+  `DB_ENGINE=postgres`) — ver §14. Risco residual conhecido, não corrigido:
+  o caminho de erro HTTP de um endpoint normal (não o `/ready/`) fica
+  bounded a `~31s`, não `~5s`, por causa da página de erro técnica do
+  Django em `DEBUG=True` (ver §14 para a causa exacta); aceitável para
+  staging local, mas a confirmar se compensa reduzir antes de qualquer
+  staging não-local.
+- **Corrigido (STG-HARD-003, fase 07):** o Content Renderer já não usa a
+  conta "root" do MinIO. Usa um utilizador de serviço dedicado
+  (`MINIO_RENDERER_USER`, default `chartrex_renderer`), criado
+  idempotentemente pelo `minio-bucket-init`, com uma policy mínima
+  (`s3:PutObject` + `s3:GetObject`, limitada ao bucket de staging — sem
+  `s3:ListBucket`, sem `s3:DeleteObject`, sem nenhuma acção `admin:*`). Root
+  fica reservado para administração local (`mc admin ...`, o próprio
+  `minio-bucket-init`). Ver §11 e
+  `resultados_execucao/prompt_03_minio_credenciais_nao_root_resultado.md`
+  para a policy completa e as validações de permissões.
 
 ## 22. Referências
 
@@ -460,5 +622,8 @@ qualificação.
 - Backlog: [`01_backlog.md`](01_backlog.md)
 - Compose de infraestrutura: `docker-compose.staging.local.yml`
 - Scripts: `scripts/staging-local-*.ps1`, `scripts/lib/staging-local-common.ps1`
-- Relatórios de execução: `resultados_execucao/prompt_01_*` a `prompt_10_*`
+- Relatórios de execução: `resultados_execucao/prompt_01_*` a `prompt_12_*`
+  (`prompt_08_e2e_local_resultado.md` é um relatório **retroactivo** — a
+  execução real ocorreu durante o Prompt 12, ver esse ficheiro para a nota
+  de retroactividade completa)
 - Fase 05 (runbook anterior, staging pré-produção não-local): `frontend/docs/01_fundamentos/05_staging_operacionalizacao_pre_producao/runbook_staging_pre_producao.md`
