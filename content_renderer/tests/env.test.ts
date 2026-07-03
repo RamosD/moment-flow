@@ -149,7 +149,69 @@ describe('loadConfig', () => {
         .storageProvider,
     ).toBe('local');
     expect(() =>
-      loadConfig({ ...BASE, NODE_ENV: 'test', INTERNAL_API_TOKEN: 'x', STORAGE_PROVIDER: 's3' }),
+      loadConfig({ ...BASE, NODE_ENV: 'test', INTERNAL_API_TOKEN: 'x', STORAGE_PROVIDER: 'r2' }),
     ).toThrow(ConfigError);
+  });
+
+  describe('STORAGE_PROVIDER=s3 (STG-LOCAL-004)', () => {
+    const S3_VARS = {
+      STORAGE_PROVIDER: 's3',
+      STORAGE_ENDPOINT: 'http://127.0.0.1:9000',
+      STORAGE_BUCKET: 'chartrex-staging',
+      STORAGE_ACCESS_KEY: 'minio-access-key',
+      STORAGE_SECRET_KEY: 'minio-secret-key',
+    };
+
+    it('accepts STORAGE_PROVIDER=s3 with all required variables', () => {
+      const config = loadConfig({ ...BASE, NODE_ENV: 'test', INTERNAL_API_TOKEN: 'x', ...S3_VARS });
+      expect(config.storageProvider).toBe('s3');
+      expect(config.storageEndpoint).toBe('http://127.0.0.1:9000');
+      expect(config.storageBucket).toBe('chartrex-staging');
+      expect(config.storageAccessKey).toBe('minio-access-key');
+      expect(config.storageSecretKey).toBe('minio-secret-key');
+      // Defaults.
+      expect(config.storageRegion).toBe('us-east-1');
+      expect(config.storageForcePathStyle).toBe(true);
+      expect(config.storagePublicBaseUrl).toBe('http://127.0.0.1:9000/chartrex-staging');
+    });
+
+    it('honours an explicit STORAGE_PUBLIC_BASE_URL override', () => {
+      const config = loadConfig({
+        ...BASE,
+        NODE_ENV: 'test',
+        INTERNAL_API_TOKEN: 'x',
+        ...S3_VARS,
+        STORAGE_PUBLIC_BASE_URL: 'http://minio.local:9000/chartrex-staging/',
+      });
+      expect(config.storagePublicBaseUrl).toBe('http://minio.local:9000/chartrex-staging');
+    });
+
+    it('honours STORAGE_FORCE_PATH_STYLE=false', () => {
+      const config = loadConfig({
+        ...BASE,
+        NODE_ENV: 'test',
+        INTERNAL_API_TOKEN: 'x',
+        ...S3_VARS,
+        STORAGE_FORCE_PATH_STYLE: 'false',
+      });
+      expect(config.storageForcePathStyle).toBe(false);
+    });
+
+    it.each(['STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY'])(
+      'rejects STORAGE_PROVIDER=s3 with %s missing',
+      (missingVar) => {
+        const vars = { ...S3_VARS } as Record<string, string>;
+        delete vars[missingVar];
+        expect(() =>
+          loadConfig({ ...BASE, NODE_ENV: 'test', INTERNAL_API_TOKEN: 'x', ...vars }),
+        ).toThrow(ConfigError);
+      },
+    );
+
+    it('does not require S3 variables when STORAGE_PROVIDER=local', () => {
+      expect(() =>
+        loadConfig({ ...BASE, NODE_ENV: 'test', INTERNAL_API_TOKEN: 'x', STORAGE_PROVIDER: 'local' }),
+      ).not.toThrow();
+    });
   });
 });

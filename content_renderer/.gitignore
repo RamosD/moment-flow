@@ -14,8 +14,10 @@ coverage/
 !.env.example
 !.env.e2e.example
 
-# Local renderer storage (generated assets)
-storage/
+# Local renderer storage (generated assets). Anchored to the project root so
+# it does NOT also match src/storage/ (the storage provider source code) —
+# an unanchored "storage/" pattern would silently hide that from git.
+/storage/
 
 # E2E harness logs/artifacts
 e2e-logs/

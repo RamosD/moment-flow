@@ -6,7 +6,7 @@ is never called here — only the JSON-safe envelope is asserted.
 
 import json
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -45,9 +45,18 @@ def _rich_campaign():
 
 
 def _add_clicks(workspace, campaign, *, today, n_today=1, n_old=1, n_ancient=1):
-    """Create a smart link + clicks across the 7d / 30d / older buckets."""
+    """Create a smart link + clicks across the 7d / 30d / older buckets.
+
+    Anchored to ``today`` (not ``timezone.now()``): the payload builder buckets
+    clicks relative to the ``reference_date`` the caller passes in, which in
+    these tests is a fixed date, not real wall-clock time. Anchoring click
+    timestamps to real "now" instead of that same fixed date made the buckets
+    silently drift out of alignment as real time moved away from the fixed
+    reference — the fix is to use the one anchor the test actually cares
+    about.
+    """
     link = factories.SmartLinkFactory(campaign=campaign, workspace=workspace)
-    base = timezone.now()
+    base = timezone.make_aware(datetime.combine(today, time(12, 0)))
     for _ in range(n_today):
         SmartLinkClick.objects.create(
             workspace=workspace, campaign=campaign, smart_link=link, clicked_at=base

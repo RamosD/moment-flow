@@ -1,0 +1,157 @@
+# =============================================================================
+# Docker Compose — Infraestrutura de staging local (STG-LOCAL-002)
+#
+# Sobe APENAS as duas dependências de infraestrutura que a fase 06 exige como
+# containers locais persistentes: PostgreSQL e MinIO. Ver a justificação
+# completa em:
+#   frontend/docs/01_fundamentos/06_staging_infraestrutura_real_local/arquitectura_staging_local.md
+#
+# NÃO contém os serviços aplicacionais (Frontend, Backend Core, Intelligence
+# Engine, Content Renderer) — esses continuam processos locais nesta fase,
+# por decisão explícita do backlog (§5, §6.2).
+#
+# Sem cloud. Sem produção. Sem secrets reais neste ficheiro — os valores
+# abaixo são placeholders de desenvolvimento local, sobrepostos por um
+# ficheiro `.env.staging.local` (ignorado pelo git; ver
+# `.env.staging.local.example` para os nomes de variável esperados).
+#
+# IMPORTANTE (STG-LOCAL-005): `.env.staging.local` é injectado nos
+# containers via `env_file:` em cada serviço (credenciais dentro do
+# processo), mas os overrides de PORTA (${POSTGRES_PORT}, ${MINIO_API_PORT},
+# ${MINIO_CONSOLE_PORT}) são resolvidos pelo Docker Compose a partir do
+# ambiente do CLI, não do `env_file:` de um serviço. Para que os overrides de
+# porta também se apliquem, invocar sempre com `--env-file`:
+#   docker compose --env-file .env.staging.local -f docker-compose.staging.local.yml <comando>
+#
+# Comandos — ver `resultados_execucao/prompt_02_compose_local_resultado.md`
+# e `resultados_execucao/prompt_05_secrets_locais_resultado.md` na pasta da
+# fase 06 para a lista completa (start/stop/status/logs/reset/rotação).
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chartrex_staging_postgres
+    restart: unless-stopped
+    env_file:
+      - path: ./.env.staging.local
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chartrex_staging}
+      POSTGRES_USER: ${POSTGRES_USER:-chartrex_staging}
+      # Placeholder de desenvolvimento local — NUNCA um segredo real.
+      # Sobrepor via .env.staging.local (ignorado pelo git).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chartrex_staging_local_only}
+    ports:
+      # 127.0.0.1: sem isto, o Docker publica em 0.0.0.0 por default —
+      # alcançável por qualquer máquina na mesma rede local, não só esta
+      # (achado STG-LOCAL-009). Staging local é de uma única máquina.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - chartrex_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chartrex_staging} -d ${POSTGRES_DB:-chartrex_staging}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - chartrex_staging_local
+
+  minio:
+    image: minio/minio:latest
+    container_name: chartrex_staging_minio
+    restart: unless-stopped
+    env_file:
+      - path: ./.env.staging.local
+        required: false
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chartrex_staging_minio}
+      # Placeholder de desenvolvimento local — NUNCA um segredo real.
+      # Sobrepor via .env.staging.local (ignorado pelo git). O MinIO exige
+      # pelo menos 8 caracteres para MINIO_ROOT_PASSWORD.
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chartrex_staging_local_only}
+    command: server /data --console-address ":9001"
+    ports:
+      # 127.0.0.1: idem à nota em postgres acima (achado STG-LOCAL-009).
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - chartrex_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - chartrex_staging_local
+
+  # Serviço auxiliar, de execução única: cria o bucket de staging no MinIO
+  # depois de o healthcheck do MinIO passar. Não é um serviço de longa duração
+  # (restart: "no") — corre, cria o bucket se ainda não existir, e termina.
+  minio-bucket-init:
+    image: minio/mc:latest
+    container_name: chartrex_staging_minio_bucket_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - path: ./.env.staging.local
+        required: false
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chartrex_staging_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chartrex_staging_local_only}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-chartrex-staging}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "local/$$STORAGE_BUCKET"
+        # DECISÃO DOCUMENTADA (STG-LOCAL-004, corrigida no STG-LOCAL-009):
+        # leitura anónima de OBJECTOS apenas (s3:GetObject), sem listagem do
+        # bucket, para que Asset.public_url seja descarregável sem
+        # credenciais — o mesmo nível de acesso que o provider `local`
+        # (filesystem) já tem hoje via /files. Isto é aceitável para staging
+        # local (dados descartáveis, sem PII real) e NÃO deve ser replicado
+        # em produção sem uma decisão própria de signed_url/bucket privado.
+        #
+        # NOTA (achado real do STG-LOCAL-009): a política pré-definida
+        # `mc anonymous set download` do MinIO concede s3:GetObject **e**
+        # s3:ListBucket (listagem pública de todas as chaves do bucket) —
+        # não é "download-only" como o nome sugere. Usa-se aqui uma política
+        # JSON própria com apenas s3:GetObject, sem s3:ListBucket.
+        cat > /tmp/anonymous-policy.json <<POLICY
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {"AWS": ["*"]},
+              "Action": ["s3:GetObject"],
+              "Resource": ["arn:aws:s3:::$$STORAGE_BUCKET/*"]
+            }
+          ]
+        }
+        POLICY
+        mc anonymous set-json /tmp/anonymous-policy.json "local/$$STORAGE_BUCKET"
+        echo "bucket $$STORAGE_BUCKET pronto (leitura anonima: GetObject apenas, sem listagem)"
+    networks:
+      - chartrex_staging_local
+    restart: "no"
+
+volumes:
+  # Volumes nomeados e persistentes — sobrevivem a `docker compose down`
+  # (sem `-v`) e a restarts. Só são apagados por um reset destrutivo explícito
+  # (`docker compose down -v`), nunca pelos comandos normais de paragem.
+  # `name:` fixo para não depender do nome do projecto/directório (evita
+  # volumes órfãos ao mudar o caminho do checkout).
+  chartrex_postgres_data:
+    name: chartrex_staging_postgres_data
+  chartrex_minio_data:
+    name: chartrex_staging_minio_data
+
+networks:
+  chartrex_staging_local:
+    name: chartrex_staging_local

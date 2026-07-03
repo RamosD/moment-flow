@@ -12,10 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Runtime state for scripts/staging-local-*.ps1 (PIDs, logs) — STG-LOCAL-006
+.local-runtime/
+
 # Local environment files (keep .env.example tracked)
 .env
 .env.*
 !.env.example
+!.env.staging.local.example
 
 # Editor directories and files
 .vscode/*

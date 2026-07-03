@@ -40,9 +40,17 @@ export interface JobEnvelope {
   payload: Record<string, unknown>;
 }
 
-/** Storage/asset metadata returned to Django so it can create an Asset. */
+/**
+ * Storage/asset metadata returned to Django so it can create an Asset.
+ *
+ * `storage_provider` mirrors Django's `Asset.StorageProvider` choices
+ * (`local`, `s3`, `r2`, `gcs` — see `backend_core/apps/core/models.py`).
+ * MinIO is S3-compatible, so the local-staging MinIO provider reports `s3`
+ * here rather than a `minio`-specific value, avoiding an unnecessary Django
+ * enum change (STG-LOCAL-004).
+ */
 export interface AssetMetadata {
-  storage_provider: 'local';
+  storage_provider: 'local' | 's3';
   bucket: string;
   storage_key: string;
   file_name: string;
@@ -52,7 +60,7 @@ export interface AssetMetadata {
   height: number | null;
   duration_seconds: number | null;
   checksum: string;
-  /** Optional dev-only URL where the file can be fetched (local /files server). */
+  /** URL where the file can be fetched (local `/files` server, or the S3-compatible endpoint). */
   public_url?: string;
 }
 

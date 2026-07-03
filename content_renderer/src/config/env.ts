@@ -44,6 +44,15 @@ export interface AppConfig {
   storageProvider: StorageProviderName;
   localStorageRoot: string;
   localStoragePublicBaseUrl: string;
+  /** S3-compatible storage config (STG-LOCAL-004). Only required when storageProvider === 's3'. */
+  storageEndpoint: string;
+  storageBucket: string;
+  storageRegion: string;
+  storageAccessKey: string;
+  storageSecretKey: string;
+  storageForcePathStyle: boolean;
+  /** Public base URL for downloads; defaults to `<endpoint>/<bucket>` (path-style) when unset. */
+  storagePublicBaseUrl: string;
   maxJobPayloadBytes: number;
   callbackTimeoutSeconds: number;
   renderTimeoutSeconds: number;
@@ -118,8 +127,8 @@ function stringOrDefault(raw: string | undefined, fallback: string): string {
   return value === '' ? fallback : value;
 }
 
-/** Known storage providers. Only `local` is implemented in this phase. */
-const KNOWN_STORAGE_PROVIDERS: readonly StorageProviderName[] = ['local'];
+/** Known storage providers implemented behind {@link StorageProvider}. */
+const KNOWN_STORAGE_PROVIDERS: readonly StorageProviderName[] = ['local', 's3'];
 
 function parseStorageProvider(raw: string | undefined): StorageProviderName {
   const value = (raw ?? 'local').trim().toLowerCase();
@@ -177,6 +186,36 @@ function validateInternalToken(args: {
 }
 
 /**
+ * Validate the S3-compatible storage config (STG-LOCAL-004). Only enforced
+ * when `storageProvider === 's3'` — the `local` provider (dev default) never
+ * requires these variables. Fails fast at boot, mirroring
+ * {@link validateInternalToken}. Error details never include the secret key
+ * value itself, only the variable name.
+ */
+function validateStorageConfig(args: {
+  storageProvider: StorageProviderName;
+  storageEndpoint: string;
+  storageBucket: string;
+  storageAccessKey: string;
+  storageSecretKey: string;
+}): void {
+  if (args.storageProvider !== 's3') {
+    return;
+  }
+  const required: Array<[string, string]> = [
+    ['STORAGE_ENDPOINT', args.storageEndpoint],
+    ['STORAGE_BUCKET', args.storageBucket],
+    ['STORAGE_ACCESS_KEY', args.storageAccessKey],
+    ['STORAGE_SECRET_KEY', args.storageSecretKey],
+  ];
+  for (const [name, value] of required) {
+    if (value.trim() === '') {
+      throw new ConfigError(`${name} is required when STORAGE_PROVIDER=s3.`, { variable: name });
+    }
+  }
+}
+
+/**
  * Build and validate the application configuration from a raw environment map.
  * Throws {@link ConfigError} on any invalid or missing-required value.
  */
@@ -217,6 +256,30 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     );
   }
 
+  const storageProvider = parseStorageProvider(source.STORAGE_PROVIDER);
+  const storageEndpoint = (source.STORAGE_ENDPOINT ?? '').trim();
+  const storageBucket = (source.STORAGE_BUCKET ?? '').trim();
+  const storageAccessKey = (source.STORAGE_ACCESS_KEY ?? '').trim();
+  const storageSecretKey = (source.STORAGE_SECRET_KEY ?? '').trim();
+  validateStorageConfig({
+    storageProvider,
+    storageEndpoint,
+    storageBucket,
+    storageAccessKey,
+    storageSecretKey,
+  });
+  // Path-style addressing (http://endpoint/bucket/key) is required for MinIO
+  // and most self-hosted S3-compatible endpoints, which don't support
+  // virtual-hosted-style (http://bucket.endpoint/key) DNS resolution.
+  const storageForcePathStyle = parseBoolean(source.STORAGE_FORCE_PATH_STYLE, true);
+  const storagePublicBaseUrlRaw = (source.STORAGE_PUBLIC_BASE_URL ?? '').trim();
+  const storagePublicBaseUrl =
+    storagePublicBaseUrlRaw !== ''
+      ? storagePublicBaseUrlRaw.replace(/\/+$/, '')
+      : storageEndpoint !== '' && storageBucket !== ''
+        ? `${storageEndpoint.replace(/\/+$/, '')}/${storageBucket}`
+        : '';
+
   return {
     nodeEnv,
     port: parsePositiveInteger('PORT', source.PORT, 8202),
@@ -228,12 +291,19 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       'http://localhost:8202',
     ),
     backendCoreBaseUrl: stringOrDefault(source.BACKEND_CORE_BASE_URL, 'http://localhost:8100'),
-    storageProvider: parseStorageProvider(source.STORAGE_PROVIDER),
+    storageProvider,
     localStorageRoot: stringOrDefault(source.LOCAL_STORAGE_ROOT, './storage'),
     localStoragePublicBaseUrl: stringOrDefault(
       source.LOCAL_STORAGE_PUBLIC_BASE_URL,
       'http://localhost:8202/files',
     ),
+    storageEndpoint,
+    storageBucket,
+    storageRegion: stringOrDefault(source.STORAGE_REGION, 'us-east-1'),
+    storageAccessKey,
+    storageSecretKey,
+    storageForcePathStyle,
+    storagePublicBaseUrl,
     maxJobPayloadBytes: parsePositiveInteger(
       'MAX_JOB_PAYLOAD_BYTES',
       source.MAX_JOB_PAYLOAD_BYTES,
