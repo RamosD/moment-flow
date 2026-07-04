@@ -136,7 +136,19 @@ if (-not $Only -or ($Only -contains 'secrets_grep')) {
     # O valor é OU um placeholder <...> completo (pode conter espaços/vírgulas,
     # ex.: <definido, oculto>), OU um token sem espaços — tentado nesta ordem.
     $pattern = '(?<![A-Za-z0-9_])(INTERNAL_API_TOKEN|SECRET_KEY|DB_PASSWORD|MINIO_ROOT_PASSWORD|STORAGE_ACCESS_KEY|STORAGE_SECRET_KEY|E2E_PASSWORD|STRIPE_[A-Z_]+)=(<[^`|"''<>]*>|[^\s`|;)"'']+)'
-    $safeMarker = '(?i)(change.?me|placeholder|example|dev.?only|local.?only|unused|deadbeef|test|smoke|token|^<.*>$|^postgres$|^\*+$)'
+    # Achado STG-HARD-009 (fase 07): três falsos positivos reais confirmados
+    # (nunca um segredo real) — (a) `\$env:VAR` é uma REFERÊNCIA de variável
+    # PowerShell, nunca um valor literal (ex.: `-e MINIO_ROOT_PASSWORD=$env:MINIO_ROOT_PASSWORD`
+    # em cleanup-e2e-run.ps1 — o padrão correcto e seguro de passar segredos
+    # a um subprocesso, sem nunca os imprimir); (b) um valor com uma barra
+    # invertida literal é quase sempre código-fonte de uma regex de redacção
+    # (ex.: `/STORAGE_SECRET_KEY=\S+/gi` em diagnostics.ts), nunca um segredo
+    # real; (c) colchetes/chavetas (`[`/`]`/`{`/`}`) só aparecem aqui quando o
+    # "valor" é na verdade um padrão regex mostrado como documentação (ex.:
+    # `INTERNAL_API_TOKEN=[A-Za-z0-9_-]{10,}` num relatório a descrever um
+    # grep passado), nunca um segredo real — segredos reais não contêm estes
+    # caracteres.
+    $safeMarker = '(?i)(change.?me|placeholder|example|dev.?only|local.?only|unused|deadbeef|test|smoke|token|^<.*>$|^postgres$|^\*+$|\$env:|\\|[\[\]{}])'
     $suspicious = New-Object System.Collections.Generic.List[string]
     $trackedFiles = & git -C $root ls-files
     foreach ($relPath in $trackedFiles) {
@@ -184,6 +196,16 @@ if ($WithE2E) {
         Write-Output '[FAIL] e2e — E2E_PASSWORD não está definido no ambiente. Exportar antes de correr com -WithE2E.'
         $results.Add([pscustomobject]@{ Name = 'e2e'; Status = 'FAIL'; Seconds = 0 })
     } else {
+        # STG-HARD-004 (fase 07): `pnpm test:e2e` spawna `manage.py seed_e2e_run`
+        # herdando SÓ o ambiente deste processo pwsh (`global-setup.ts`, `env:
+        # process.env`) — nunca lê `backend_core\.env.staging.local` sozinho.
+        # Os 4 processos aplicacionais já activos (verificados acima) usam
+        # postgres correctamente porque o `apps-up.ps1` carregou o env deles
+        # próprios; sem esta linha, o `seed_e2e_run` desta chamada seedaria
+        # contra SQLite (default de dev), não contra o PostgreSQL do container
+        # — silenciosamente, sem erro. `-Required:$true`: falhar alto e cedo
+        # se o ficheiro não existir, em vez de continuar contra SQLite sem avisar.
+        Import-DotEnvFile -Path (Join-Path $root 'backend_core\.env.staging.local') -Required:$true
         Invoke-Step -Name 'e2e' -WorkingDirectory $feDir -FilePath 'pnpm.cmd' -ArgumentList @('test:e2e')
     }
 } else {

@@ -97,6 +97,33 @@ ficheiros de serviço. Ver
 `resultados_execucao/prompt_05_secrets_locais_resultado.md` para o
 inventário completo e o procedimento de rotação testado.
 
+**Criar estes ficheiros pela primeira vez (achado STG-HARD-004, fase 07)**:
+o `.env.staging.local` da raiz tem um `.env.staging.local.example`
+dedicado (copiar e só ajustar passwords). **Os três ficheiros de serviço
+não têm** — só existe o `.env.example` genérico de cada um (valores de
+**dev**, não de staging). Copiar e ajustar exactamente estas chaves (todas
+as outras podem ficar no default do `.env.example`):
+
+| Ficheiro (a partir do `.env.example` do serviço) | Chaves a mudar | Valor de staging |
+|---|---|---|
+| `backend_core/.env.staging.local` | `DB_ENGINE` | `postgres` (default do `.env.example`: `sqlite`) |
+| | `DB_NAME`/`DB_USER`/`DB_PASSWORD` | Iguais a `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD` do `.env.staging.local` da raiz |
+| | `DB_HOST` | `127.0.0.1` |
+| | `DB_PORT` | Igual a `POSTGRES_PORT` da raiz (default `5432`; `5433` nesta máquina — ver §2) |
+| | `INTERNAL_API_TOKEN` | Um valor próprio, **igual** nos 3 ficheiros de serviço |
+| | `E2E_PASSWORD` | Um valor próprio, só para correr `seed_e2e_run`/E2E |
+| `content_renderer/.env.staging.local` | `STORAGE_PROVIDER` | `s3` (default do `.env.example`: `local`) |
+| | `STORAGE_ENDPOINT` | `http://127.0.0.1:9000` (ou a porta de `MINIO_API_PORT` da raiz, se sobreposta) |
+| | `STORAGE_BUCKET` | Igual a `STORAGE_BUCKET` da raiz (default `chartrex-staging`) |
+| | `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY` | `MINIO_RENDERER_USER`/`MINIO_RENDERER_PASSWORD` da raiz (§11 — **nunca** os de root) |
+| | `INTERNAL_API_TOKEN` | O mesmo valor de `backend_core` |
+| `intelligence_engine/.env.staging.local` | `INTERNAL_API_TOKEN` | O mesmo valor de `backend_core` |
+
+`INTELLIGENCE_ENGINE_DRY_RUN=false` e `EXTERNAL_JOBS_DRY_RUN=false` **já
+são o default** do `.env.example` do `backend_core` — não precisam de
+alteração para staging (só confirmar que ninguém os mudou para `true`
+localmente, o que faria o E2E falhar por falta de recomendações — ver §19).
+
 **`ALLOW_INSECURE_EMPTY_TOKEN` nunca é uma opção válida de staging local**
 — é uma *flag* exclusiva de desenvolvimento sem stack (Content Renderer),
 confirmada `false`/ausente em todos os `.env.staging.local` desta fase.
@@ -182,9 +209,13 @@ os 4 serviços aplicacionais obrigatórios.
 
 ```powershell
 cd backend_core
-# Carregar o .env.staging.local com a mesma função que os scripts usam:
+# Carregar o .env.staging.local com a mesma função que os scripts usam.
+# -Required:$true é deliberado (achado STG-HARD-004, fase 07): sem ele,
+# um .env.staging.local em falta faz Import-DotEnvFile ficar em silêncio
+# (sem erro) e os comandos abaixo correm contra SQLite (default de dev),
+# não contra o PostgreSQL do container — parecendo ter funcionado.
 . ..\scripts\lib\staging-local-common.ps1
-Import-DotEnvFile -Path .env.staging.local
+Import-DotEnvFile -Path .env.staging.local -Required:$true
 venv\Scripts\python.exe manage.py check
 venv\Scripts\python.exe manage.py showmigrations
 venv\Scripts\python.exe manage.py migrate
@@ -197,6 +228,11 @@ usar `DB_ENGINE=sqlite` para "resolver" uma falha de migration em staging
 local — isso invalida a fase (critério de rejeição do backlog).
 
 ## 10. Seeds
+
+Continuação da mesma sessão `pwsh` de §9 (env já carregado ali). Se for uma
+sessão nova, repetir primeiro o `Import-DotEnvFile -Path .env.staging.local
+-Required:$true` de §9 — sem isso, estes seeds correm contra SQLite em
+silêncio, não contra o PostgreSQL do container.
 
 ```powershell
 venv\Scripts\python.exe manage.py seed_rbac
@@ -262,6 +298,15 @@ docker run --rm --network chartrex_staging_local --entrypoint sh minio/mc:latest
 ## 12. E2E
 
 ```powershell
+# O primeiro passo do E2E (global-setup.ts) spawna `manage.py seed_e2e_run`
+# herdando SÓ o ambiente desta sessão pwsh — nunca lê
+# backend_core\.env.staging.local sozinho. Sem esta linha, o seed corre
+# contra SQLite (default de dev), não contra o PostgreSQL do container, e
+# nada avisa — achado real STG-HARD-004 (fase 07), corrigido aqui e em
+# staging-local-quality-gate.ps1 (-WithE2E).
+. scripts\lib\staging-local-common.ps1
+Import-DotEnvFile -Path backend_core\.env.staging.local -Required:$true
+
 $env:E2E_PASSWORD = '<definido pelo operador>'
 cd frontend
 pnpm test:e2e
